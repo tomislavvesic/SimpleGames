@@ -112,6 +112,20 @@ app.innerHTML = `
       <div class="canvas-wrap">
         <canvas id="arena" width="900" height="620"></canvas>
         <div class="game-overlay" data-overlay>
+          <div class="invite-join hidden" data-invite-join>
+            <span class="overlay-kicker">You have been invited</span>
+            <h3>Join Four Sides.</h3>
+            <p>Choose a name. Your side will be assigned automatically.</p>
+            <label class="name-field">
+              <span>Your name</span>
+              <input type="text" maxlength="18" placeholder="Player name" data-invite-name autocomplete="nickname" />
+            </label>
+            <button class="primary-button invite-ready-button" type="button" data-invite-ready>
+              I am ready <span>→</span>
+            </button>
+            <small class="invite-room-code" data-invite-code></small>
+          </div>
+
           <div class="multiplayer-home" data-multiplayer-home>
             <span class="overlay-kicker">One side. One player.</span>
             <h3>Enter the arena.</h3>
@@ -163,7 +177,7 @@ app.innerHTML = `
           <button type="button" data-move="1" aria-label="Move forward">→</button>
         </div>
       </div>
-      <p class="game-hint">Move with arrows or WASD · Your paddle glows brighter · First to 7 wins</p>
+      <p class="game-hint">Move with arrows or WASD · Defend your goal · Every miss costs one of your five lives</p>
     </div>
   </dialog>
 `;
@@ -178,8 +192,10 @@ soundButton.addEventListener("click", () => {
 
 const dialog = document.querySelector(".game-dialog");
 const homeNode = document.querySelector("[data-multiplayer-home]");
+const inviteNode = document.querySelector("[data-invite-join]");
 const lobbyNode = document.querySelector("[data-room-lobby]");
 const nameInput = document.querySelector("[data-player-name]");
+const inviteNameInput = document.querySelector("[data-invite-name]");
 const codeInput = document.querySelector("[data-room-code]");
 let selectedMode = "duel";
 let latestLobby = null;
@@ -195,6 +211,7 @@ const game = new ArenaGame({
 });
 
 nameInput.value = game.name;
+inviteNameInput.value = game.name;
 
 document.querySelector("[data-play]").addEventListener("click", async () => {
   dialog.showModal();
@@ -246,6 +263,18 @@ document.querySelector("[data-join-code]").addEventListener("click", () => {
   }
 });
 
+document.querySelector("[data-invite-ready]").addEventListener("click", (event) => {
+  const code = new URLSearchParams(location.search).get("room");
+  const name = inviteNameInput.value.trim();
+  if (!name) {
+    inviteNameInput.focus();
+    return;
+  }
+  event.currentTarget.disabled = true;
+  event.currentTarget.textContent = "Joining…";
+  game.join(code, name, { autoReady: true });
+});
+
 codeInput.addEventListener("input", () => (codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "")));
 document.querySelector("[data-refresh-rooms]").addEventListener("click", loadPublicRooms);
 document.querySelector("[data-ready]").addEventListener("click", (event) => {
@@ -266,11 +295,15 @@ window.addEventListener("resize", () => game.resize());
 
 async function showRoomHome() {
   homeNode.classList.remove("hidden");
+  inviteNode.classList.add("hidden");
   lobbyNode.classList.add("hidden");
   document.querySelector("[data-overlay]").classList.remove("hidden");
   const queryRoom = new URLSearchParams(location.search).get("room");
-  if (queryRoom && /^[A-Z0-9]{6}$/i.test(queryRoom) && nameInput.value) {
-    game.join(queryRoom, nameInput.value);
+  if (queryRoom && /^[A-Z0-9]{6}$/i.test(queryRoom)) {
+    homeNode.classList.add("hidden");
+    inviteNode.classList.remove("hidden");
+    document.querySelector("[data-invite-code]").textContent = `Room ${queryRoom.toUpperCase()}`;
+    setTimeout(() => inviteNameInput.focus(), 50);
     return;
   }
   await loadPublicRooms();
@@ -307,6 +340,7 @@ async function loadPublicRooms() {
 function renderLobby(lobby, playerId) {
   latestLobby = lobby;
   homeNode.classList.add("hidden");
+  inviteNode.classList.add("hidden");
   lobbyNode.classList.remove("hidden");
   document.querySelector("[data-lobby-code]").textContent = lobby.code;
   document.querySelector("[data-lobby-mode]").textContent = lobby.modeLabel;
@@ -316,7 +350,7 @@ function renderLobby(lobby, playerId) {
     <div class="lobby-slot ${player.bot ? "bot" : ""}" style="--slot-color:${player.color}">
       <i></i>
       <span><b>${escapeHtml(player.name)}${player.id === playerId ? " (you)" : ""}</b><small>${player.side}${player.bot ? " · CPU" : ""}</small></span>
-      <em>${player.ready ? "Ready" : player.name === "Open slot" ? "Joinable" : "Not ready"}</em>
+      <em>${player.id === lobby.hostId ? "Game Master" : player.ready ? "Ready" : player.name === "Open slot" ? "Joinable" : "Not ready"}</em>
     </div>
   `).join("");
   const readyButton = document.querySelector("[data-ready]");
@@ -326,10 +360,11 @@ function renderLobby(lobby, playerId) {
   const startButton = document.querySelector("[data-start-match]");
   startButton.classList.toggle("hidden", !isHost);
   const humans = lobby.players.filter((player) => !player.bot && player.name !== "Open slot");
-  const canStart = (humans.length >= 2 || lobby.bots) && humans.every((player) => player.id === lobby.hostId || player.ready);
+  const canStart = (humans.length >= 2 || lobby.bots || lobby.players.some((player) => player.bot))
+    && humans.every((player) => player.id === lobby.hostId || player.ready);
   startButton.disabled = !canStart;
   document.querySelector("[data-lobby-note]").textContent = isHost
-    ? canStart ? "Everyone is ready. Start when you are." : "Waiting for players to ready up."
+    ? canStart ? "Everyone is ready. Start when you are." : "You are the Game Master. Waiting for players to ready up."
     : `You control the ${me?.side || ""} side. Ready up when set.`;
 }
 

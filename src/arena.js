@@ -3,6 +3,8 @@ const COLORS = {
   line: "rgba(230, 238, 232, .09)",
   white: "#f2f0e8",
 };
+const GOAL_HALF = { left: 0.22, right: 0.22, top: 0.15, bottom: 0.15 };
+const PADDLE_HALF = { left: 0.082, right: 0.082, top: 0.056, bottom: 0.056 };
 
 export class ArenaGame {
   constructor({ canvas, scoreNode, statusNode, overlay, lobbyNode, isSoundOn, onLobby }) {
@@ -63,11 +65,12 @@ export class ArenaGame {
     return response.json();
   }
 
-  join(code, name) {
+  join(code, name, { autoReady = false } = {}) {
     this.disconnect();
     this.name = (name || "Player").trim().slice(0, 18);
     localStorage.setItem("four-sides-name", this.name);
     this.room = code.toUpperCase();
+    this.autoReady = autoReady;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${protocol}//${location.host}/api/rooms/${this.room}/socket?name=${encodeURIComponent(this.name)}&player=${this.playerId}`;
     this.statusNode.textContent = "Connecting";
@@ -100,6 +103,10 @@ export class ArenaGame {
       localStorage.setItem("four-sides-player", this.playerId);
       history.replaceState({}, "", `?room=${message.code}`);
       this.statusNode.textContent = `Room ${message.code}`;
+      if (this.autoReady) {
+        this.send({ type: "ready", ready: true });
+        this.autoReady = false;
+      }
       this.ping(480, 0.06);
     }
     if (message.type === "lobby") {
@@ -109,6 +116,7 @@ export class ArenaGame {
       this.onLobby(message, this.playerId);
     }
     if (message.type === "game-start") {
+      this.mode = message.mode;
       this.overlay.classList.add("hidden");
       this.lobbyNode.classList.add("hidden");
       this.statusNode.textContent = `${this.side.toUpperCase()} SIDE`;
@@ -125,6 +133,21 @@ export class ArenaGame {
     if (message.type === "return-lobby") {
       this.snapshot = null;
       this.overlay.classList.remove("hidden");
+    }
+    if (message.type === "room-closed") {
+      this.room = null;
+      this.snapshot = null;
+      this.overlay.classList.remove("hidden");
+      this.lobbyNode.classList.remove("hidden");
+      this.lobbyNode.innerHTML = `
+        <div class="closed-room">
+          <span class="overlay-kicker">Room closed</span>
+          <h3>Game Master left.</h3>
+          <p>${this.escapeHtml(message.reason || "This game no longer exists.")}</p>
+          <button class="secondary-button" type="button" data-back-to-games>Back to games</button>
+        </div>
+      `;
+      this.lobbyNode.querySelector("[data-back-to-games]").addEventListener("click", () => location.assign(location.pathname));
     }
   }
 
@@ -170,8 +193,12 @@ export class ArenaGame {
 
   updateScore(snapshot) {
     this.scoreNode.innerHTML = snapshot.paddles
-      .map((p) => `<i style="--player:${p.color}">${p.name} <b>${p.score}</b></i>`)
+      .map((p) => `<i class="${p.eliminated ? "eliminated" : ""}" style="--player:${p.color}">${this.escapeHtml(p.name)} <b>♥ ${p.lives}</b></i>`)
       .join("");
+  }
+
+  escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
   }
 
   drawLoop() {
@@ -199,9 +226,36 @@ export class ArenaGame {
 
     if (!this.snapshot) return;
     const margin = 24;
-    const hLength = Math.min(132, this.width * .22);
-    const vLength = Math.min(132, this.height * .22);
+    const active = new Set(this.snapshot.paddles.filter((p) => !p.eliminated).map((p) => p.side));
+    const drawWall = (side) => {
+      const vertical = side === "left" || side === "right";
+      const total = vertical ? this.height : this.width;
+      const center = total / 2;
+      const opening = active.has(side) ? GOAL_HALF[side] * total : 0;
+      const fixed = side === "left" || side === "top" ? margin : (vertical ? this.width - margin : this.height - margin);
+      ctx.strokeStyle = "rgba(224,230,225,.32)";
+      ctx.lineWidth = 7;
+      ctx.lineCap = "butt";
+      const segment = (from, to) => {
+        ctx.beginPath();
+        if (vertical) { ctx.moveTo(fixed, from); ctx.lineTo(fixed, to); }
+        else { ctx.moveTo(from, fixed); ctx.lineTo(to, fixed); }
+        ctx.stroke();
+      };
+      if (!opening) {
+        segment(0, total);
+      } else {
+        segment(0, center - opening);
+        segment(center + opening, total);
+        ctx.strokeStyle = "rgba(255,255,255,.08)";
+        ctx.lineWidth = 2;
+        segment(center - opening, center + opening);
+      }
+    };
+    ["left", "top", "right", "bottom"].forEach(drawWall);
+
     this.snapshot.paddles.forEach((paddle) => {
+      if (paddle.eliminated) return;
       ctx.strokeStyle = paddle.color;
       ctx.shadowColor = paddle.color;
       ctx.shadowBlur = paddle.side === this.side ? 24 : 12;
@@ -211,11 +265,13 @@ export class ArenaGame {
       if (paddle.side === "left" || paddle.side === "right") {
         const x = paddle.side === "left" ? margin : this.width - margin;
         const y = paddle.pos * this.height;
-        ctx.moveTo(x, y - vLength / 2); ctx.lineTo(x, y + vLength / 2);
+        const half = PADDLE_HALF[paddle.side] * this.height;
+        ctx.moveTo(x, y - half); ctx.lineTo(x, y + half);
       } else {
         const y = paddle.side === "top" ? margin : this.height - margin;
         const x = paddle.pos * this.width;
-        ctx.moveTo(x - hLength / 2, y); ctx.lineTo(x + hLength / 2, y);
+        const half = PADDLE_HALF[paddle.side] * this.width;
+        ctx.moveTo(x - half, y); ctx.lineTo(x + half, y);
       }
       ctx.stroke();
       ctx.shadowBlur = 0;

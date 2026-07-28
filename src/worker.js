@@ -2,11 +2,13 @@ import { DurableObject } from "cloudflare:workers";
 
 const SIDES = ["left", "top", "right", "bottom"];
 const MODES = {
-  duel: { label: "1 vs 1", sides: ["left", "right"], maxPlayers: 2, target: 7 },
-  teams: { label: "2 vs 2", sides: SIDES, maxPlayers: 4, target: 7 },
-  ffa: { label: "Four for all", sides: SIDES, maxPlayers: 4, target: 7 },
+  duel: { label: "1 vs 1", sides: ["left", "right"], maxPlayers: 2 },
+  teams: { label: "2 vs 2", sides: SIDES, maxPlayers: 4 },
+  ffa: { label: "Four for all", sides: SIDES, maxPlayers: 4 },
 };
 const COLORS = { left: "#ff725e", top: "#69a7ff", right: "#ffd45c", bottom: "#63d6ae" };
+const GOAL_HALF = { left: 0.22, right: 0.22, top: 0.15, bottom: 0.15 };
+const PADDLE_HALF = { left: 0.082, right: 0.082, top: 0.056, bottom: 0.056 };
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -167,6 +169,9 @@ export class GameRoom extends DurableObject {
     const occupied = new Set([...this.players.values()].filter((p) => p.connected && p.id !== requestedId).map((p) => p.side));
     const side = existing?.side || mode.sides.find((candidate) => !occupied.has(candidate));
     if (!side) return json({ error: "Room is full" }, 409);
+    for (const [id, stale] of this.players) {
+      if (id !== requestedId && stale.side === side && !stale.connected) this.players.delete(id);
+    }
 
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
@@ -192,7 +197,7 @@ export class GameRoom extends DurableObject {
 
     server.send(JSON.stringify({ type: "welcome", playerId: player.id, side, code: this.config.code }));
     if (this.status === "playing") {
-      server.send(JSON.stringify({ type: "game-start", mode: this.config.mode, target: mode.target }));
+      server.send(JSON.stringify({ type: "game-start", mode: this.config.mode, lives: 5 }));
       if (this.game) server.send(JSON.stringify(this.snapshotPayload()));
     } else {
       await this.updateDirectory();
@@ -233,7 +238,8 @@ export class GameRoom extends DurableObject {
     if (message.type === "start" && player.id === this.hostId && this.status === "lobby") {
       const humans = [...this.players.values()].filter((p) => p.connected);
       const everyoneReady = humans.every((p) => p.id === this.hostId || p.ready);
-      const enough = humans.length >= 2 || this.config.bots;
+      const hasReplacementBot = [...this.players.values()].some((p) => p.replacedByBot);
+      const enough = humans.length >= 2 || this.config.bots || hasReplacementBot;
       if (everyoneReady && enough) await this.startGame();
     }
   }
@@ -242,21 +248,36 @@ export class GameRoom extends DurableObject {
     const attachment = ws.deserializeAttachment();
     const player = this.players.get(attachment?.id);
     if (!player) return;
+    if (player.id === this.hostId && this.status !== "closed") {
+      await this.closeRoom("The Game Master left. This room has closed.");
+      return;
+    }
     player.connected = false;
     player.ws = null;
     player.input = 0;
 
     if (this.status === "lobby") {
-      this.players.delete(player.id);
-      if (player.id === this.hostId) {
-        this.hostId = [...this.players.values()].find((p) => p.connected)?.id || null;
-        await this.ctx.storage.put("hostId", this.hostId);
-      }
+      player.replacedByBot = true;
       await this.updateDirectory();
       this.broadcastLobby();
     } else {
       this.broadcastEvent({ type: "notice", text: `${player.name} disconnected — bot took over.` });
     }
+  }
+
+  async closeRoom(reason) {
+    this.status = "closed";
+    if (this.loop) clearInterval(this.loop);
+    this.loop = null;
+    await this.ctx.storage.put("status", "closed");
+    await this.updateDirectory("closed");
+    this.broadcast({ type: "room-closed", reason });
+    for (const socket of this.ctx.getWebSockets()) {
+      try { socket.close(1012, reason); } catch {}
+    }
+    await this.ctx.storage.deleteAll();
+    this.players.clear();
+    this.game = null;
   }
 
   saveAttachment(player) {
@@ -274,9 +295,12 @@ export class GameRoom extends DurableObject {
     const mode = MODES[this.config.mode];
     const players = mode.sides.map((side) => {
       const human = [...this.players.values()].find((p) => p.side === side && p.connected);
+      const departed = [...this.players.values()].find((p) => p.side === side && p.replacedByBot);
       return human
         ? { id: human.id, name: human.name, side, color: COLORS[side], ready: human.ready, bot: false }
-        : { id: `bot-${side}`, name: this.config.bots ? "Bot" : "Open slot", side, color: COLORS[side], ready: this.config.bots, bot: this.config.bots };
+        : this.config.bots || departed
+          ? { id: `bot-${side}`, name: departed ? `${departed.name} bot` : "Bot", side, color: COLORS[side], ready: true, bot: true }
+          : { id: `open-${side}`, name: "Open slot", side, color: COLORS[side], ready: false, bot: false };
     });
     return {
       type: "lobby",
@@ -329,7 +353,8 @@ export class GameRoom extends DurableObject {
         playerId: human?.id || null,
         name: human?.name || "Bot",
         bot: !human,
-        score: 0,
+        lives: 5,
+        eliminated: false,
       };
     }
     this.game = {
@@ -341,7 +366,7 @@ export class GameRoom extends DurableObject {
       winner: null,
     };
     this.spawnBall();
-    this.broadcast({ type: "game-start", mode: this.config.mode, target: mode.target });
+    this.broadcast({ type: "game-start", mode: this.config.mode, lives: 5 });
     this.lastTick = Date.now();
     this.lastBroadcast = 0;
     this.loop = setInterval(() => this.tick(), 1000 / 60);
@@ -382,16 +407,19 @@ export class GameRoom extends DurableObject {
         const target = paddle.side === "left" || paddle.side === "right" ? ball?.y : ball?.x;
         direction = target == null || Math.abs(target - paddle.pos) < 0.025 ? 0 : Math.sign(target - paddle.pos);
       }
-      paddle.pos = Math.max(0.16, Math.min(0.84, paddle.pos + direction * dt * (useBot ? 0.43 : 0.66)));
+      if (paddle.eliminated) continue;
+      const min = 0.5 - GOAL_HALF[paddle.side] + PADDLE_HALF[paddle.side];
+      const max = 0.5 + GOAL_HALF[paddle.side] - PADDLE_HALF[paddle.side];
+      paddle.pos = Math.max(min, Math.min(max, paddle.pos + direction * dt * (useBot ? 0.43 : 0.66)));
     }
 
     for (const ball of this.game.balls) {
       ball.x += ball.vx * dt;
       ball.y += ball.vy * dt;
       this.collide(ball);
-      const missed = ball.x < -0.035 ? "left" : ball.x > 1.035 ? "right" : ball.y < -0.05 ? "top" : ball.y > 1.05 ? "bottom" : null;
+      const missed = this.missedGoal(ball);
       if (missed) {
-        this.scorePoint(missed, ball.lastHit);
+        this.loseLife(missed);
         if (!this.game.roundOver) {
           this.game.countdown = 1.6;
           this.spawnBall(missed);
@@ -412,21 +440,20 @@ export class GameRoom extends DurableObject {
   }
 
   collide(ball) {
-    const half = 0.105;
-    const edge = 0.035;
+    const edge = 0.032;
     const hit = (side) => {
       const paddle = this.game.paddles[side];
-      if (!paddle) return false;
+      if (!paddle || paddle.eliminated) return false;
       const along = side === "left" || side === "right" ? ball.y : ball.x;
-      if (Math.abs(along - paddle.pos) > half) return false;
+      if (Math.abs(along - paddle.pos) > PADDLE_HALF[side]) return false;
       ball.lastHit = side;
-      const english = (along - paddle.pos) * 0.34;
-      if (side === "left") { ball.x = edge; ball.vx = Math.abs(ball.vx) * 1.025; ball.vy += english; }
-      if (side === "right") { ball.x = 1 - edge; ball.vx = -Math.abs(ball.vx) * 1.025; ball.vy += english; }
-      if (side === "top") { ball.y = edge; ball.vy = Math.abs(ball.vy) * 1.025; ball.vx += english; }
-      if (side === "bottom") { ball.y = 1 - edge; ball.vy = -Math.abs(ball.vy) * 1.025; ball.vx += english; }
-      const speed = Math.hypot(ball.vx, ball.vy);
-      if (speed > 0.62) { ball.vx *= 0.62 / speed; ball.vy *= 0.62 / speed; }
+      const offset = Math.max(-1, Math.min(1, (along - paddle.pos) / PADDLE_HALF[side]));
+      const angle = offset * Math.PI * 0.36;
+      const speed = Math.min(Math.max(0.35, Math.hypot(ball.vx, ball.vy) * 1.045) * (1 + Math.abs(offset) * 0.055), 0.72);
+      if (side === "left") { ball.x = edge; ball.vx = Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
+      if (side === "right") { ball.x = 1 - edge; ball.vx = -Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
+      if (side === "top") { ball.y = edge; ball.vx = Math.sin(angle) * speed; ball.vy = Math.cos(angle) * speed; }
+      if (side === "bottom") { ball.y = 1 - edge; ball.vx = Math.sin(angle) * speed; ball.vy = -Math.cos(angle) * speed; }
       return true;
     };
     if (ball.vx < 0 && ball.x <= edge) hit("left");
@@ -434,37 +461,52 @@ export class GameRoom extends DurableObject {
     if (ball.vy < 0 && ball.y <= edge) hit("top");
     if (ball.vy > 0 && ball.y >= 1 - edge) hit("bottom");
 
-    // In duel mode the unused top and bottom edges are solid walls.
-    if (this.config.mode === "duel") {
-      if (ball.y < edge) { ball.y = edge; ball.vy = Math.abs(ball.vy); }
-      if (ball.y > 1 - edge) { ball.y = 1 - edge; ball.vy = -Math.abs(ball.vy); }
-    }
+    const isWall = (side, along) => {
+      const paddle = this.game.paddles[side];
+      return !paddle || paddle.eliminated || Math.abs(along - 0.5) > GOAL_HALF[side];
+    };
+    if (ball.x <= edge && ball.vx < 0 && isWall("left", ball.y)) { ball.x = edge; ball.vx = Math.abs(ball.vx); }
+    if (ball.x >= 1 - edge && ball.vx > 0 && isWall("right", ball.y)) { ball.x = 1 - edge; ball.vx = -Math.abs(ball.vx); }
+    if (ball.y <= edge && ball.vy < 0 && isWall("top", ball.x)) { ball.y = edge; ball.vy = Math.abs(ball.vy); }
+    if (ball.y >= 1 - edge && ball.vy > 0 && isWall("bottom", ball.x)) { ball.y = 1 - edge; ball.vy = -Math.abs(ball.vy); }
   }
 
-  scorePoint(missed, lastHit) {
+  missedGoal(ball) {
+    const inside = (side, along) => {
+      const paddle = this.game.paddles[side];
+      return paddle && !paddle.eliminated && Math.abs(along - 0.5) <= GOAL_HALF[side];
+    };
+    if (ball.x < -0.035 && inside("left", ball.y)) return "left";
+    if (ball.x > 1.035 && inside("right", ball.y)) return "right";
+    if (ball.y < -0.05 && inside("top", ball.x)) return "top";
+    if (ball.y > 1.05 && inside("bottom", ball.x)) return "bottom";
+    return null;
+  }
+
+  loseLife(missed) {
     const paddles = this.game.paddles;
-    if (this.config.mode === "duel") {
-      const scorer = missed === "left" ? "right" : "left";
-      paddles[scorer].score += 1;
+    const defender = paddles[missed];
+    if (!defender || defender.eliminated) return;
+    defender.lives = Math.max(0, defender.lives - 1);
+    if (defender.lives === 0) defender.eliminated = true;
+
+    if (this.config.mode === "duel" && defender.eliminated) {
+      const winner = Object.values(paddles).find((p) => !p.eliminated);
+      this.finishGame(winner?.name || "Opponent");
     } else if (this.config.mode === "teams") {
       const teams = { left: "warm", bottom: "warm", top: "cool", right: "cool" };
-      const scoringTeam = teams[missed] === "warm" ? "cool" : "warm";
-      Object.values(paddles).filter((p) => teams[p.side] === scoringTeam).forEach((p) => (p.score += 1));
-    } else if (lastHit && lastHit !== missed) {
-      paddles[lastHit].score += 1;
-    } else {
-      Object.values(paddles).filter((p) => p.side !== missed).forEach((p) => (p.score += 1));
+      const warmOut = Object.values(paddles).filter((p) => teams[p.side] === "warm").every((p) => p.eliminated);
+      const coolOut = Object.values(paddles).filter((p) => teams[p.side] === "cool").every((p) => p.eliminated);
+      if (warmOut || coolOut) this.finishGame(warmOut ? "Cool team" : "Warm team");
+    } else if (this.config.mode === "ffa") {
+      const alive = Object.values(paddles).filter((p) => !p.eliminated);
+      if (alive.length <= 1) this.finishGame(alive[0]?.name || "Nobody");
     }
-
-    const winner = Object.values(paddles).find((p) => p.score >= MODES[this.config.mode].target);
-    if (winner) this.finishGame(winner);
   }
 
   finishGame(winner) {
     this.game.roundOver = true;
-    this.game.winner = this.config.mode === "teams"
-      ? (["left", "bottom"].includes(winner.side) ? "Warm team" : "Cool team")
-      : winner.name;
+    this.game.winner = winner;
     clearInterval(this.loop);
     this.loop = null;
     this.broadcastSnapshot();
@@ -498,7 +540,7 @@ export class GameRoom extends DurableObject {
       type: "snapshot",
       time: Date.now(),
       countdown: Math.ceil(this.game.countdown),
-      paddles: Object.values(this.game.paddles).map(({ side, pos, color, name, bot, score }) => ({ side, pos, color, name, bot, score })),
+      paddles: Object.values(this.game.paddles).map(({ side, pos, color, name, bot, lives, eliminated }) => ({ side, pos, color, name, bot, lives, eliminated })),
       balls: this.game.balls,
       roundOver: this.game.roundOver,
       winner: this.game.winner,

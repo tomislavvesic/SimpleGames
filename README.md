@@ -9,7 +9,9 @@ Objects and WebSockets. It supports:
 - 1 vs 1, 2 vs 2, and four-player free-for-all
 - Optional bots for empty or disconnected sides
 - Public lobby discovery and quick play
-- Server-authoritative physics and scoring
+- Server-authoritative physics and game state
+- Game Master-owned rooms that close when their creator leaves
+- Five lives per player, bounded goal areas, rebound walls, and angled hits
 
 ## Local development
 
