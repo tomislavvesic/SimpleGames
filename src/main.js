@@ -21,9 +21,9 @@ app.innerHTML = `
 
   <main>
     <section class="hero">
-      <div class="eyebrow"><span></span> No installs. Just play.</div>
+      <div class="eyebrow"><span></span> Play solo or together</div>
       <h1>Tiny games.<br><em>Big nights.</em></h1>
-      <p>Quick browser games made for the same couch. Grab a few friends, pick your keys, and try not to blame each other.</p>
+      <p>Quick browser games for quiet breaks and loud group chats. Play at your own pace or invite friends with a link.</p>
       <a class="primary-button" href="#games">Choose a game <span>↓</span></a>
       <div class="hero-orbit orbit-a"></div>
       <div class="hero-orbit orbit-b"></div>
@@ -35,10 +35,10 @@ app.innerHTML = `
     <section class="games-section" id="games">
       <div class="section-heading">
         <div>
-          <div class="eyebrow"><span></span> Pick your challenge</div>
+          <div class="eyebrow"><span></span> Your game, your company</div>
           <h2>Games on deck</h2>
         </div>
-        <p>Built for quick rounds, questionable teamwork, and immediate rematches.</p>
+        <p>Every game works either as a focused solo challenge or as something worth sharing with friends.</p>
       </div>
 
       <div class="game-grid">
@@ -53,9 +53,9 @@ app.innerHTML = `
             <div class="art-grid"></div>
           </div>
           <div class="card-body">
-            <div class="tags"><span>Co-op</span><span>2–4 players</span></div>
+            <div class="tags"><span>Multiplayer</span><span>1–4 players</span></div>
             <h3>Four Sides</h3>
-            <p>One arena. Four paddles. Keep every ball in play or go down together.</p>
+            <p>Claim one side, share a room link, and defend your edge against friends or bots.</p>
             <button class="play-button" type="button" data-play>
               Play now <span>↗</span>
             </button>
@@ -65,9 +65,9 @@ app.innerHTML = `
         <article class="game-card coming">
           <div class="card-art rhythm-art"><span>♪</span><span>●</span><span>♪</span></div>
           <div class="card-body">
-            <div class="tags"><span>Versus</span><span>2 players</span></div>
-            <h3>Beat Split</h3>
-            <p>Share the keyboard. Steal the rhythm. Miss the beat and lose your streak.</p>
+            <div class="tags"><span>Co-op</span><span>2–4 players</span></div>
+            <h3>Signal Crew</h3>
+            <p>Keep a tiny station alive together. Match the signals before the whole system goes dark.</p>
             <span class="soon-label">Coming soon</span>
           </div>
         </article>
@@ -85,15 +85,15 @@ app.innerHTML = `
     </section>
 
     <section class="manifesto" id="about">
-      <span class="manifesto-kicker">The house rules</span>
-      <p>No accounts. No downloads. No 40-minute tutorials.</p>
-      <p class="muted">Just small games that get everyone playing.</p>
+      <span class="manifesto-kicker">The simple promise</span>
+      <p>No downloads. No 40-minute tutorials.</p>
+      <p class="muted">Play alone, invite a friend, or bring the whole crew.</p>
     </section>
   </main>
 
   <footer>
     <a class="brand footer-brand" href="#"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span>SIMPLE<br>GAMES</span></a>
-    <p>Made for game night · 2026</p>
+    <p>Made for one player or many · 2026</p>
   </footer>
 
   <dialog class="game-dialog" aria-label="Four Sides game">

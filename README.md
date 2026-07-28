@@ -1,6 +1,6 @@
 # Simple Games
 
-A browser arcade for quick solo, versus, and local co-op games.
+A browser arcade for quick single-player and online multiplayer games.
 
 Four Sides is an online multiplayer game backed by Cloudflare Durable
 Objects and WebSockets. It supports:
