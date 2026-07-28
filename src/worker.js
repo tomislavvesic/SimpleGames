@@ -9,6 +9,8 @@ const MODES = {
 const COLORS = { left: "#ff725e", top: "#69a7ff", right: "#ffd45c", bottom: "#63d6ae" };
 const GOAL_HALF = { left: 0.22, right: 0.22, top: 0.15, bottom: 0.15 };
 const PADDLE_HALF = { left: 0.082, right: 0.082, top: 0.056, bottom: 0.056 };
+const ARENA_EDGE = 0.032;
+const BALL_RADIUS = { x: 0.009, y: 0.013 };
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -444,7 +446,7 @@ export class GameRoom extends DurableObject {
   }
 
   collide(ball) {
-    const edge = 0.032;
+    const edge = ARENA_EDGE;
     const hit = (side) => {
       const paddle = this.game.paddles[side];
       if (!paddle || paddle.eliminated) return false;
@@ -454,25 +456,25 @@ export class GameRoom extends DurableObject {
       const offset = Math.max(-1, Math.min(1, (along - paddle.pos) / PADDLE_HALF[side]));
       const angle = offset * Math.PI * 0.36;
       const speed = Math.min(Math.max(0.35, Math.hypot(ball.vx, ball.vy) * 1.045) * (1 + Math.abs(offset) * 0.055), 0.72);
-      if (side === "left") { ball.x = edge; ball.vx = Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
-      if (side === "right") { ball.x = 1 - edge; ball.vx = -Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
-      if (side === "top") { ball.y = edge; ball.vx = Math.sin(angle) * speed; ball.vy = Math.cos(angle) * speed; }
-      if (side === "bottom") { ball.y = 1 - edge; ball.vx = Math.sin(angle) * speed; ball.vy = -Math.cos(angle) * speed; }
+      if (side === "left") { ball.x = edge + BALL_RADIUS.x; ball.vx = Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
+      if (side === "right") { ball.x = 1 - edge - BALL_RADIUS.x; ball.vx = -Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
+      if (side === "top") { ball.y = edge + BALL_RADIUS.y; ball.vx = Math.sin(angle) * speed; ball.vy = Math.cos(angle) * speed; }
+      if (side === "bottom") { ball.y = 1 - edge - BALL_RADIUS.y; ball.vx = Math.sin(angle) * speed; ball.vy = -Math.cos(angle) * speed; }
       return true;
     };
-    if (ball.vx < 0 && ball.x <= edge) hit("left");
-    if (ball.vx > 0 && ball.x >= 1 - edge) hit("right");
-    if (ball.vy < 0 && ball.y <= edge) hit("top");
-    if (ball.vy > 0 && ball.y >= 1 - edge) hit("bottom");
+    if (ball.vx < 0 && ball.x - BALL_RADIUS.x <= edge) hit("left");
+    if (ball.vx > 0 && ball.x + BALL_RADIUS.x >= 1 - edge) hit("right");
+    if (ball.vy < 0 && ball.y - BALL_RADIUS.y <= edge) hit("top");
+    if (ball.vy > 0 && ball.y + BALL_RADIUS.y >= 1 - edge) hit("bottom");
 
     const isWall = (side, along) => {
       const paddle = this.game.paddles[side];
       return !paddle || paddle.eliminated || Math.abs(along - 0.5) > GOAL_HALF[side];
     };
-    if (ball.x <= edge && ball.vx < 0 && isWall("left", ball.y)) { ball.x = edge; ball.vx = Math.abs(ball.vx); }
-    if (ball.x >= 1 - edge && ball.vx > 0 && isWall("right", ball.y)) { ball.x = 1 - edge; ball.vx = -Math.abs(ball.vx); }
-    if (ball.y <= edge && ball.vy < 0 && isWall("top", ball.x)) { ball.y = edge; ball.vy = Math.abs(ball.vy); }
-    if (ball.y >= 1 - edge && ball.vy > 0 && isWall("bottom", ball.x)) { ball.y = 1 - edge; ball.vy = -Math.abs(ball.vy); }
+    if (ball.x - BALL_RADIUS.x <= edge && ball.vx < 0 && isWall("left", ball.y)) { ball.x = edge + BALL_RADIUS.x; ball.vx = Math.abs(ball.vx); }
+    if (ball.x + BALL_RADIUS.x >= 1 - edge && ball.vx > 0 && isWall("right", ball.y)) { ball.x = 1 - edge - BALL_RADIUS.x; ball.vx = -Math.abs(ball.vx); }
+    if (ball.y - BALL_RADIUS.y <= edge && ball.vy < 0 && isWall("top", ball.x)) { ball.y = edge + BALL_RADIUS.y; ball.vy = Math.abs(ball.vy); }
+    if (ball.y + BALL_RADIUS.y >= 1 - edge && ball.vy > 0 && isWall("bottom", ball.x)) { ball.y = 1 - edge - BALL_RADIUS.y; ball.vy = -Math.abs(ball.vy); }
   }
 
   missedGoal(ball) {

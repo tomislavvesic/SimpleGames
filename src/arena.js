@@ -5,6 +5,8 @@ const COLORS = {
 };
 const GOAL_HALF = { left: 0.22, right: 0.22, top: 0.15, bottom: 0.15 };
 const PADDLE_HALF = { left: 0.082, right: 0.082, top: 0.056, bottom: 0.056 };
+const ARENA_EDGE = 0.032;
+const BALL_RADIUS = { x: 0.009, y: 0.013 };
 
 export class ArenaGame {
   constructor({ canvas, scoreNode, statusNode, overlay, lobbyNode, isSoundOn, onLobby }) {
@@ -245,14 +247,21 @@ export class ArenaGame {
 
     if (!this.snapshot) return;
     const rendered = this.projectSnapshot(performance.now());
-    const margin = 24;
+    const edgeX = ARENA_EDGE * this.width;
+    const edgeY = ARENA_EDGE * this.height;
     const active = new Set(rendered.paddles.filter((p) => !p.eliminated).map((p) => p.side));
     const drawWall = (side) => {
       const vertical = side === "left" || side === "right";
       const total = vertical ? this.height : this.width;
       const center = total / 2;
       const opening = active.has(side) ? GOAL_HALF[side] * total : 0;
-      const fixed = side === "left" || side === "top" ? margin : (vertical ? this.width - margin : this.height - margin);
+      const fixed = side === "left"
+        ? edgeX
+        : side === "right"
+          ? this.width - edgeX
+          : side === "top"
+            ? edgeY
+            : this.height - edgeY;
       ctx.strokeStyle = "rgba(224,230,225,.32)";
       ctx.lineWidth = 7;
       ctx.lineCap = "butt";
@@ -283,12 +292,12 @@ export class ArenaGame {
       ctx.lineCap = "round";
       ctx.beginPath();
       if (paddle.side === "left" || paddle.side === "right") {
-        const x = paddle.side === "left" ? margin : this.width - margin;
+        const x = paddle.side === "left" ? edgeX : this.width - edgeX;
         const y = paddle.pos * this.height;
         const half = PADDLE_HALF[paddle.side] * this.height;
         ctx.moveTo(x, y - half); ctx.lineTo(x, y + half);
       } else {
-        const y = paddle.side === "top" ? margin : this.height - margin;
+        const y = paddle.side === "top" ? edgeY : this.height - edgeY;
         const x = paddle.pos * this.width;
         const half = PADDLE_HALF[paddle.side] * this.width;
         ctx.moveTo(x - half, y); ctx.lineTo(x + half, y);
@@ -342,12 +351,54 @@ export class ArenaGame {
 
     const balls = snapshot.countdown > 0 || snapshot.roundOver
       ? snapshot.balls
-      : snapshot.balls.map((ball) => ({
-          ...ball,
-          x: ball.x + ball.vx * elapsed,
-          y: ball.y + ball.vy * elapsed,
-        }));
+      : snapshot.balls.map((ball) => this.predictBall(ball, paddles, elapsed));
     return { ...snapshot, paddles, balls };
+  }
+
+  predictBall(source, paddles, elapsed) {
+    const ball = { ...source };
+    const steps = Math.max(1, Math.ceil(elapsed / (1 / 120)));
+    const dt = elapsed / steps;
+    const paddleFor = (side) => paddles.find((paddle) => paddle.side === side && !paddle.eliminated);
+
+    const hitPaddle = (side) => {
+      const paddle = paddleFor(side);
+      if (!paddle) return false;
+      const along = side === "left" || side === "right" ? ball.y : ball.x;
+      if (Math.abs(along - paddle.pos) > PADDLE_HALF[side]) return false;
+      const offset = Math.max(-1, Math.min(1, (along - paddle.pos) / PADDLE_HALF[side]));
+      const angle = offset * Math.PI * 0.36;
+      const speed = Math.min(Math.max(0.35, Math.hypot(ball.vx, ball.vy) * 1.045) * (1 + Math.abs(offset) * 0.055), 0.72);
+      if (side === "left") { ball.x = ARENA_EDGE + BALL_RADIUS.x; ball.vx = Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
+      if (side === "right") { ball.x = 1 - ARENA_EDGE - BALL_RADIUS.x; ball.vx = -Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
+      if (side === "top") { ball.y = ARENA_EDGE + BALL_RADIUS.y; ball.vx = Math.sin(angle) * speed; ball.vy = Math.cos(angle) * speed; }
+      if (side === "bottom") { ball.y = 1 - ARENA_EDGE - BALL_RADIUS.y; ball.vx = Math.sin(angle) * speed; ball.vy = -Math.cos(angle) * speed; }
+      return true;
+    };
+    const solidAt = (side, along) => !paddleFor(side) || Math.abs(along - 0.5) > GOAL_HALF[side];
+
+    for (let step = 0; step < steps; step += 1) {
+      ball.x += ball.vx * dt;
+      ball.y += ball.vy * dt;
+      if (ball.vx < 0 && ball.x - BALL_RADIUS.x <= ARENA_EDGE) hitPaddle("left");
+      if (ball.vx > 0 && ball.x + BALL_RADIUS.x >= 1 - ARENA_EDGE) hitPaddle("right");
+      if (ball.vy < 0 && ball.y - BALL_RADIUS.y <= ARENA_EDGE) hitPaddle("top");
+      if (ball.vy > 0 && ball.y + BALL_RADIUS.y >= 1 - ARENA_EDGE) hitPaddle("bottom");
+
+      if (ball.vx < 0 && ball.x - BALL_RADIUS.x <= ARENA_EDGE && solidAt("left", ball.y)) {
+        ball.x = ARENA_EDGE + BALL_RADIUS.x; ball.vx = Math.abs(ball.vx);
+      }
+      if (ball.vx > 0 && ball.x + BALL_RADIUS.x >= 1 - ARENA_EDGE && solidAt("right", ball.y)) {
+        ball.x = 1 - ARENA_EDGE - BALL_RADIUS.x; ball.vx = -Math.abs(ball.vx);
+      }
+      if (ball.vy < 0 && ball.y - BALL_RADIUS.y <= ARENA_EDGE && solidAt("top", ball.x)) {
+        ball.y = ARENA_EDGE + BALL_RADIUS.y; ball.vy = Math.abs(ball.vy);
+      }
+      if (ball.vy > 0 && ball.y + BALL_RADIUS.y >= 1 - ARENA_EDGE && solidAt("bottom", ball.x)) {
+        ball.y = 1 - ARENA_EDGE - BALL_RADIUS.y; ball.vy = -Math.abs(ball.vy);
+      }
+    }
+    return ball;
   }
 
   ping(frequency, duration) {
