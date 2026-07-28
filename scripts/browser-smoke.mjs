@@ -29,9 +29,15 @@ async function verifyPage(browser, name, viewport) {
   const page = await context.newPage();
   const failures = [];
   page.on("pageerror", (error) => failures.push(`pageerror: ${error.message}`));
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      failures.push(`response ${response.status()}: ${response.url()}`);
+    }
+  });
   page.on("console", (message) => {
     if (message.type() === "error" && !/fonts\.(googleapis|gstatic)\.com/.test(message.text())) {
-      failures.push(`console: ${message.text()}`);
+      const source = message.location().url;
+      failures.push(`console${source ? ` (${source})` : ""}: ${message.text()}`);
     }
   });
 
