@@ -26,4 +26,3 @@ independent, lazy-loaded module.
 - Four Sides, Signal Crew, and One Way Out behave exactly as they do now.
 - The production build, accessibility checks, multiplayer tests, and Cloudflare
   deployment all pass.
-
