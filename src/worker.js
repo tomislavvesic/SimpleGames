@@ -7,7 +7,7 @@ const MODES = {
   ffa: { label: "Four for all", sides: SIDES, maxPlayers: 4 },
 };
 const COLORS = { left: "#ff725e", top: "#69a7ff", right: "#ffd45c", bottom: "#63d6ae" };
-const GOAL_HALF = { left: 0.22, right: 0.22, top: 0.15, bottom: 0.15 };
+const GOAL_HALF = { left: 0.27, right: 0.27, top: 0.185, bottom: 0.185 };
 const PADDLE_HALF = { left: 0.082, right: 0.082, top: 0.056, bottom: 0.056 };
 const ARENA_EDGE = 0.032;
 const BALL_RADIUS = { x: 0.009, y: 0.013 };
@@ -359,6 +359,7 @@ export class GameRoom extends DurableObject {
         playerId: human?.id || null,
         name: human?.name || "Bot",
         bot: !human,
+        velocity: 0,
         lives: 5,
         eliminated: false,
       };
@@ -367,7 +368,7 @@ export class GameRoom extends DurableObject {
       paddles,
       balls: [],
       elapsed: 0,
-      countdown: 3,
+      countdown: 2,
       roundOver: false,
       winner: null,
     };
@@ -379,14 +380,15 @@ export class GameRoom extends DurableObject {
   }
 
   spawnBall(servingSide = null) {
+    const launchDirections = [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75];
     const angle = servingSide
-      ? ({ left: Math.PI, right: 0, top: -Math.PI / 2, bottom: Math.PI / 2 })[servingSide] + (Math.random() - 0.5) * 0.7
-      : Math.random() * Math.PI * 2;
+      ? ({ left: Math.PI, right: 0, top: -Math.PI / 2, bottom: Math.PI / 2 })[servingSide] + (Math.random() - 0.5) * 1.0
+      : launchDirections[Math.floor(Math.random() * launchDirections.length)] + (Math.random() - 0.5) * 0.44;
     this.game.balls = [{
       x: 0.5,
       y: 0.5,
-      vx: Math.cos(angle) * 0.34,
-      vy: Math.sin(angle) * 0.34,
+      vx: Math.cos(angle) * 0.42,
+      vy: Math.sin(angle) * 0.42,
       lastHit: null,
     }];
   }
@@ -407,16 +409,20 @@ export class GameRoom extends DurableObject {
     for (const paddle of Object.values(this.game.paddles)) {
       const player = paddle.playerId ? this.players.get(paddle.playerId) : null;
       const useBot = paddle.bot || !player?.connected;
-      let direction = player?.input || 0;
-      if (useBot) {
-        const ball = this.nearestBall(paddle);
-        const target = paddle.side === "left" || paddle.side === "right" ? ball?.y : ball?.x;
-        direction = target == null || Math.abs(target - paddle.pos) < 0.025 ? 0 : Math.sign(target - paddle.pos);
-      }
       if (paddle.eliminated) continue;
       const min = 0.5 - GOAL_HALF[paddle.side] + PADDLE_HALF[paddle.side];
       const max = 0.5 + GOAL_HALF[paddle.side] - PADDLE_HALF[paddle.side];
-      paddle.pos = Math.max(min, Math.min(max, paddle.pos + direction * dt * (useBot ? 0.43 : 0.66)));
+      if (useBot) {
+        const target = this.botTarget(paddle);
+        const error = target - paddle.pos;
+        const desiredVelocity = Math.max(-0.56, Math.min(0.56, error * 3.8));
+        const maxChange = 2.2 * dt;
+        paddle.velocity += Math.max(-maxChange, Math.min(maxChange, desiredVelocity - paddle.velocity));
+      } else {
+        paddle.velocity = (player?.input || 0) * 0.74;
+      }
+      paddle.pos = Math.max(min, Math.min(max, paddle.pos + paddle.velocity * dt));
+      if (paddle.pos === min || paddle.pos === max) paddle.velocity = 0;
     }
 
     for (const ball of this.game.balls) {
@@ -427,7 +433,7 @@ export class GameRoom extends DurableObject {
       if (missed) {
         this.loseLife(missed);
         if (!this.game.roundOver) {
-          this.game.countdown = 1.6;
+          this.game.countdown = 1.0;
           this.spawnBall(missed);
         }
         break;
@@ -445,6 +451,32 @@ export class GameRoom extends DurableObject {
     }, null);
   }
 
+  botTarget(paddle) {
+    const ball = this.nearestBall(paddle);
+    if (!ball) return 0.5;
+    const vertical = paddle.side === "left" || paddle.side === "right";
+    const along = vertical ? ball.y : ball.x;
+    const alongVelocity = vertical ? ball.vy : ball.vx;
+    const toward = paddle.side === "left"
+      ? ball.vx < 0
+      : paddle.side === "right"
+        ? ball.vx > 0
+        : paddle.side === "top"
+          ? ball.vy < 0
+          : ball.vy > 0;
+    let travelTime = 0;
+    if (toward) {
+      if (paddle.side === "left") travelTime = (ball.x - ARENA_EDGE) / Math.max(-ball.vx, 0.001);
+      if (paddle.side === "right") travelTime = (1 - ARENA_EDGE - ball.x) / Math.max(ball.vx, 0.001);
+      if (paddle.side === "top") travelTime = (ball.y - ARENA_EDGE) / Math.max(-ball.vy, 0.001);
+      if (paddle.side === "bottom") travelTime = (1 - ARENA_EDGE - ball.y) / Math.max(ball.vy, 0.001);
+    }
+    const predicted = toward ? along + alongVelocity * Math.min(Math.max(travelTime, 0), 0.85) : 0.5 + (along - 0.5) * 0.18;
+    const min = 0.5 - GOAL_HALF[paddle.side] + PADDLE_HALF[paddle.side];
+    const max = 0.5 + GOAL_HALF[paddle.side] - PADDLE_HALF[paddle.side];
+    return Math.max(min, Math.min(max, predicted));
+  }
+
   collide(ball) {
     const edge = ARENA_EDGE;
     const hit = (side) => {
@@ -455,7 +487,7 @@ export class GameRoom extends DurableObject {
       ball.lastHit = side;
       const offset = Math.max(-1, Math.min(1, (along - paddle.pos) / PADDLE_HALF[side]));
       const angle = offset * Math.PI * 0.36;
-      const speed = Math.min(Math.max(0.35, Math.hypot(ball.vx, ball.vy) * 1.045) * (1 + Math.abs(offset) * 0.055), 0.72);
+      const speed = Math.min(Math.max(0.42, Math.hypot(ball.vx, ball.vy)) + 0.035 + Math.abs(offset) * 0.012, 0.92);
       if (side === "left") { ball.x = edge + BALL_RADIUS.x; ball.vx = Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
       if (side === "right") { ball.x = 1 - edge - BALL_RADIUS.x; ball.vx = -Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
       if (side === "top") { ball.y = edge + BALL_RADIUS.y; ball.vx = Math.sin(angle) * speed; ball.vy = Math.cos(angle) * speed; }

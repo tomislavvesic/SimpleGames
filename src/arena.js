@@ -3,7 +3,7 @@ const COLORS = {
   line: "rgba(230, 238, 232, .09)",
   white: "#f2f0e8",
 };
-const GOAL_HALF = { left: 0.22, right: 0.22, top: 0.15, bottom: 0.15 };
+const GOAL_HALF = { left: 0.27, right: 0.27, top: 0.185, bottom: 0.185 };
 const PADDLE_HALF = { left: 0.082, right: 0.082, top: 0.056, bottom: 0.056 };
 const ARENA_EDGE = 0.032;
 const BALL_RADIUS = { x: 0.009, y: 0.013 };
@@ -342,8 +342,8 @@ export class ArenaGame {
       if (paddle.eliminated) return paddle;
       const old = previous?.paddles?.find((candidate) => candidate.side === paddle.side);
       let velocity = old ? (paddle.pos - old.pos) / snapshotDelta : 0;
-      if (paddle.side === this.side) velocity = this.lastDirection * 0.66;
-      velocity = Math.max(-0.7, Math.min(0.7, velocity));
+      if (paddle.side === this.side) velocity = this.lastDirection * 0.74;
+      velocity = Math.max(-0.78, Math.min(0.78, velocity));
       const min = 0.5 - GOAL_HALF[paddle.side] + PADDLE_HALF[paddle.side];
       const max = 0.5 + GOAL_HALF[paddle.side] - PADDLE_HALF[paddle.side];
       return { ...paddle, pos: Math.max(min, Math.min(max, paddle.pos + velocity * elapsed)) };
@@ -368,7 +368,7 @@ export class ArenaGame {
       if (Math.abs(along - paddle.pos) > PADDLE_HALF[side]) return false;
       const offset = Math.max(-1, Math.min(1, (along - paddle.pos) / PADDLE_HALF[side]));
       const angle = offset * Math.PI * 0.36;
-      const speed = Math.min(Math.max(0.35, Math.hypot(ball.vx, ball.vy) * 1.045) * (1 + Math.abs(offset) * 0.055), 0.72);
+      const speed = Math.min(Math.max(0.42, Math.hypot(ball.vx, ball.vy)) + 0.035 + Math.abs(offset) * 0.012, 0.92);
       if (side === "left") { ball.x = ARENA_EDGE + BALL_RADIUS.x; ball.vx = Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
       if (side === "right") { ball.x = 1 - ARENA_EDGE - BALL_RADIUS.x; ball.vx = -Math.cos(angle) * speed; ball.vy = Math.sin(angle) * speed; }
       if (side === "top") { ball.y = ARENA_EDGE + BALL_RADIUS.y; ball.vx = Math.sin(angle) * speed; ball.vy = Math.cos(angle) * speed; }
