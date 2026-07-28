@@ -1,9 +1,30 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "simple-games",
+  "main": "./src/worker.js",
   "compatibility_date": "2026-07-28",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GAME_ROOMS",
+        "class_name": "GameRoom"
+      },
+      {
+        "name": "LOBBY_DIRECTORY",
+        "class_name": "LobbyDirectory"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GameRoom", "LobbyDirectory"]
+    }
+  ]
 }

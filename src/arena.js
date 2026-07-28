@@ -1,225 +1,191 @@
 const COLORS = {
   bg: "#10151d",
   line: "rgba(230, 238, 232, .09)",
-  coral: "#ff725e",
-  blue: "#69a7ff",
-  yellow: "#ffd45c",
-  mint: "#63d6ae",
   white: "#f2f0e8",
 };
 
 export class ArenaGame {
-  constructor({ canvas, scoreNode, livesNode, overlay, isSoundOn }) {
+  constructor({ canvas, scoreNode, statusNode, overlay, lobbyNode, isSoundOn, onLobby }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.scoreNode = scoreNode;
-    this.livesNode = livesNode;
+    this.statusNode = statusNode;
     this.overlay = overlay;
+    this.lobbyNode = lobbyNode;
     this.isSoundOn = isSoundOn;
+    this.onLobby = onLobby;
     this.keys = new Set();
-    this.running = false;
-    this.paused = false;
-    this.lastTime = 0;
+    this.snapshot = null;
+    this.room = null;
+    this.playerId = localStorage.getItem("four-sides-player") || crypto.randomUUID();
+    localStorage.setItem("four-sides-player", this.playerId);
+    this.name = localStorage.getItem("four-sides-name") || "";
+    this.side = null;
+    this.socket = null;
     this.audio = null;
-
-    this.paddles = [
-      { side: "left", color: COLORS.coral, keys: ["KeyW", "KeyS"], pos: 0.5 },
-      { side: "top", color: COLORS.blue, keys: ["KeyA", "KeyD"], pos: 0.5 },
-      { side: "right", color: COLORS.yellow, keys: ["ArrowUp", "ArrowDown"], pos: 0.5 },
-      { side: "bottom", color: COLORS.mint, keys: ["KeyJ", "KeyL"], pos: 0.5 },
-    ];
+    this.frame = requestAnimationFrame(() => this.drawLoop());
 
     window.addEventListener("keydown", (event) => {
-      if (this.controlCodes.includes(event.code)) event.preventDefault();
-      if (event.code === "KeyP" && this.running) this.paused = !this.paused;
+      if (!this.room || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "KeyA", "KeyD", "KeyW", "KeyS"].includes(event.code)) return;
+      event.preventDefault();
       this.keys.add(event.code);
+      this.sendDirection();
     });
-    window.addEventListener("keyup", (event) => this.keys.delete(event.code));
-    this.drawIdle();
+    window.addEventListener("keyup", (event) => {
+      this.keys.delete(event.code);
+      this.sendDirection();
+    });
   }
 
-  get controlCodes() {
-    return this.paddles.flatMap((p) => p.keys);
+  async listRooms() {
+    const response = await fetch("/api/rooms");
+    if (!response.ok) throw new Error("Could not load public rooms");
+    return (await response.json()).rooms;
+  }
+
+  async createRoom(settings) {
+    const response = await fetch("/api/rooms/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) throw new Error("Could not create room");
+    return response.json();
+  }
+
+  async quickPlay(mode) {
+    const response = await fetch("/api/rooms/quick", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    if (!response.ok) throw new Error("Could not find a room");
+    return response.json();
+  }
+
+  join(code, name) {
+    this.disconnect();
+    this.name = (name || "Player").trim().slice(0, 18);
+    localStorage.setItem("four-sides-name", this.name);
+    this.room = code.toUpperCase();
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${protocol}//${location.host}/api/rooms/${this.room}/socket?name=${encodeURIComponent(this.name)}&player=${this.playerId}`;
+    this.statusNode.textContent = "Connecting";
+    this.socket = new WebSocket(url);
+    this.socket.addEventListener("message", (event) => this.handleMessage(JSON.parse(event.data)));
+    this.socket.addEventListener("close", (event) => {
+      if (this.room && event.code !== 1000) {
+        this.statusNode.textContent = "Reconnecting…";
+        setTimeout(() => this.room && this.join(this.room, this.name), 1200);
+      }
+    });
+    this.socket.addEventListener("error", () => {
+      this.statusNode.textContent = "Connection failed";
+    });
+  }
+
+  disconnect() {
+    const socket = this.socket;
+    this.socket = null;
+    this.room = null;
+    this.snapshot = null;
+    this.side = null;
+    if (socket && socket.readyState < 2) socket.close(1000, "Left room");
+  }
+
+  handleMessage(message) {
+    if (message.type === "welcome") {
+      this.playerId = message.playerId;
+      this.side = message.side;
+      localStorage.setItem("four-sides-player", this.playerId);
+      history.replaceState({}, "", `?room=${message.code}`);
+      this.statusNode.textContent = `Room ${message.code}`;
+      this.ping(480, 0.06);
+    }
+    if (message.type === "lobby") {
+      this.snapshot = null;
+      this.overlay.classList.remove("hidden");
+      this.lobbyNode.classList.remove("hidden");
+      this.onLobby(message, this.playerId);
+    }
+    if (message.type === "game-start") {
+      this.overlay.classList.add("hidden");
+      this.lobbyNode.classList.add("hidden");
+      this.statusNode.textContent = `${this.side.toUpperCase()} SIDE`;
+      this.ping(620, 0.09);
+    }
+    if (message.type === "snapshot") {
+      this.snapshot = message;
+      this.updateScore(message);
+      if (message.roundOver) {
+        this.statusNode.textContent = `${message.winner} wins`;
+        this.ping(740, 0.18);
+      }
+    }
+    if (message.type === "return-lobby") {
+      this.snapshot = null;
+      this.overlay.classList.remove("hidden");
+    }
+  }
+
+  send(payload) {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(payload));
+  }
+
+  sendDirection() {
+    let direction = 0;
+    if (this.keys.has("ArrowLeft") || this.keys.has("ArrowUp") || this.keys.has("KeyA") || this.keys.has("KeyW")) direction -= 1;
+    if (this.keys.has("ArrowRight") || this.keys.has("ArrowDown") || this.keys.has("KeyD") || this.keys.has("KeyS")) direction += 1;
+    if (direction !== this.lastDirection) {
+      this.lastDirection = direction;
+      this.send({ type: "input", direction });
+    }
+  }
+
+  bindTouch(button, direction) {
+    const start = (event) => {
+      event.preventDefault();
+      this.send({ type: "input", direction });
+    };
+    const stop = (event) => {
+      event.preventDefault();
+      this.send({ type: "input", direction: 0 });
+    };
+    button.addEventListener("pointerdown", start);
+    button.addEventListener("pointerup", stop);
+    button.addEventListener("pointercancel", stop);
+    button.addEventListener("pointerleave", stop);
   }
 
   resize() {
     const rect = this.canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (!rect.width || !rect.height) return;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
     this.canvas.width = Math.round(rect.width * dpr);
     this.canvas.height = Math.round(rect.height * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.width = rect.width;
     this.height = rect.height;
-    if (!this.running) this.drawIdle();
   }
 
-  start() {
-    this.resize();
-    this.score = 0;
-    this.lives = 8;
-    this.elapsed = 0;
-    this.spawnAt = 12;
-    this.balls = [];
-    this.paddles.forEach((p) => (p.pos = 0.5));
-    this.spawnBall();
-    this.overlay.classList.add("hidden");
-    this.running = true;
-    this.paused = false;
-    this.lastTime = performance.now();
-    this.scoreNode.textContent = "0000";
-    this.livesNode.textContent = this.lives;
-    requestAnimationFrame((time) => this.loop(time));
+  updateScore(snapshot) {
+    this.scoreNode.innerHTML = snapshot.paddles
+      .map((p) => `<i style="--player:${p.color}">${p.name} <b>${p.score}</b></i>`)
+      .join("");
   }
 
-  stop() {
-    this.running = false;
-    this.paused = false;
-    this.overlay.classList.remove("hidden", "game-over");
-    this.overlay.querySelector("h3").textContent = "Keep the core alive.";
-    this.overlay.querySelector("p").textContent =
-      "Every missed ball costs a shared life. Survive long enough and more balls join the arena.";
-    this.overlay.querySelector(".start-game").innerHTML = "Start round <span>→</span>";
-  }
-
-  spawnBall() {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = Math.min(235 + this.elapsed * 2.3, 390);
-    this.balls.push({
-      x: this.width / 2,
-      y: this.height / 2,
-      vx: Math.cos(angle) * speed || speed,
-      vy: Math.sin(angle) * speed || speed * 0.6,
-      r: 8,
-      trail: [],
-    });
-    this.ping(520, 0.07);
-  }
-
-  loop(time) {
-    if (!this.running) return;
-    const dt = Math.min((time - this.lastTime) / 1000, 0.025);
-    this.lastTime = time;
-    if (!this.paused) this.update(dt);
+  drawLoop() {
     this.draw();
-    requestAnimationFrame((next) => this.loop(next));
-  }
-
-  update(dt) {
-    this.elapsed += dt;
-    if (this.elapsed >= this.spawnAt && this.balls.length < 4) {
-      this.spawnBall();
-      this.spawnAt += 15;
-    }
-
-    const paddleSpeed = 0.82;
-    this.paddles.forEach((paddle) => {
-      if (this.keys.has(paddle.keys[0])) paddle.pos -= paddleSpeed * dt;
-      if (this.keys.has(paddle.keys[1])) paddle.pos += paddleSpeed * dt;
-      paddle.pos = Math.max(0.16, Math.min(0.84, paddle.pos));
-    });
-
-    const margin = 23;
-    const horizontalLength = Math.min(132, this.width * 0.24);
-    const verticalLength = Math.min(132, this.height * 0.24);
-
-    [...this.balls].forEach((ball) => {
-      ball.trail.unshift({ x: ball.x, y: ball.y });
-      ball.trail = ball.trail.slice(0, 9);
-      ball.x += ball.vx * dt;
-      ball.y += ball.vy * dt;
-
-      const left = this.paddles[0];
-      const top = this.paddles[1];
-      const right = this.paddles[2];
-      const bottom = this.paddles[3];
-
-      if (ball.vx < 0 && ball.x - ball.r <= margin && Math.abs(ball.y - left.pos * this.height) < verticalLength / 2) {
-        ball.x = margin + ball.r;
-        ball.vx = Math.abs(ball.vx) * 1.025;
-        this.hit(ball, left);
-      }
-      if (ball.vx > 0 && ball.x + ball.r >= this.width - margin && Math.abs(ball.y - right.pos * this.height) < verticalLength / 2) {
-        ball.x = this.width - margin - ball.r;
-        ball.vx = -Math.abs(ball.vx) * 1.025;
-        this.hit(ball, right);
-      }
-      if (ball.vy < 0 && ball.y - ball.r <= margin && Math.abs(ball.x - top.pos * this.width) < horizontalLength / 2) {
-        ball.y = margin + ball.r;
-        ball.vy = Math.abs(ball.vy) * 1.025;
-        this.hit(ball, top);
-      }
-      if (ball.vy > 0 && ball.y + ball.r >= this.height - margin && Math.abs(ball.x - bottom.pos * this.width) < horizontalLength / 2) {
-        ball.y = this.height - margin - ball.r;
-        ball.vy = -Math.abs(ball.vy) * 1.025;
-        this.hit(ball, bottom);
-      }
-
-      if (ball.x < -20 || ball.x > this.width + 20 || ball.y < -20 || ball.y > this.height + 20) {
-        this.balls.splice(this.balls.indexOf(ball), 1);
-        this.lives -= 1;
-        this.livesNode.textContent = this.lives;
-        this.ping(110, 0.18);
-        if (this.lives <= 0) this.endGame();
-        else setTimeout(() => this.running && this.spawnBall(), 380);
-      }
-    });
-  }
-
-  hit(ball, paddle) {
-    this.score += 25;
-    this.scoreNode.textContent = String(this.score).padStart(4, "0");
-    if (paddle.side === "left" || paddle.side === "right") {
-      ball.vy += (ball.y / this.height - paddle.pos) * 115;
-    } else {
-      ball.vx += (ball.x / this.width - paddle.pos) * 115;
-    }
-    this.ping(340 + Math.min(this.score, 1000) / 5, 0.045);
-  }
-
-  endGame() {
-    this.running = false;
-    this.overlay.classList.remove("hidden");
-    this.overlay.classList.add("game-over");
-    this.overlay.querySelector(".overlay-kicker").textContent = "Round over";
-    this.overlay.querySelector("h3").textContent = `${this.score} points.`;
-    this.overlay.querySelector("p").textContent =
-      this.score > 700 ? "Excellent save work. The arena wants a rematch." : "The corners are cruel. Tighten the formation and try again.";
-    this.overlay.querySelector(".start-game").innerHTML = "Play again <span>↻</span>";
-  }
-
-  ping(frequency, duration) {
-    if (!this.isSoundOn()) return;
-    try {
-      this.audio ||= new AudioContext();
-      const oscillator = this.audio.createOscillator();
-      const gain = this.audio.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.055, this.audio.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.audio.currentTime + duration);
-      oscillator.connect(gain).connect(this.audio.destination);
-      oscillator.start();
-      oscillator.stop(this.audio.currentTime + duration);
-    } catch {
-      // Audio is an enhancement; gameplay should never depend on it.
-    }
-  }
-
-  drawIdle() {
-    if (!this.width) {
-      const rect = this.canvas.getBoundingClientRect();
-      this.width = rect.width || 900;
-      this.height = rect.height || 620;
-    }
-    this.draw();
+    this.frame = requestAnimationFrame(() => this.drawLoop());
   }
 
   draw() {
+    if (!this.width) this.resize();
+    if (!this.width) return;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, this.width, this.height);
-
     ctx.strokeStyle = COLORS.line;
     ctx.lineWidth = 1;
     for (let x = 35; x < this.width; x += 35) {
@@ -228,63 +194,69 @@ export class ArenaGame {
     for (let y = 35; y < this.height; y += 35) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.width, y); ctx.stroke();
     }
-
-    ctx.save();
-    ctx.translate(this.width / 2, this.height / 2);
     ctx.strokeStyle = "rgba(242,240,232,.12)";
-    ctx.beginPath(); ctx.arc(0, 0, Math.min(this.width, this.height) * 0.13, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, 0, Math.min(this.width, this.height) * 0.06, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
+    ctx.beginPath(); ctx.arc(this.width / 2, this.height / 2, Math.min(this.width, this.height) * .13, 0, Math.PI * 2); ctx.stroke();
 
-    const margin = 23;
-    const hLength = Math.min(132, this.width * 0.24);
-    const vLength = Math.min(132, this.height * 0.24);
-    this.paddles.forEach((paddle) => {
+    if (!this.snapshot) return;
+    const margin = 24;
+    const hLength = Math.min(132, this.width * .22);
+    const vLength = Math.min(132, this.height * .22);
+    this.snapshot.paddles.forEach((paddle) => {
       ctx.strokeStyle = paddle.color;
       ctx.shadowColor = paddle.color;
-      ctx.shadowBlur = 18;
-      ctx.lineWidth = 10;
+      ctx.shadowBlur = paddle.side === this.side ? 24 : 12;
+      ctx.lineWidth = paddle.side === this.side ? 12 : 9;
       ctx.lineCap = "round";
       ctx.beginPath();
       if (paddle.side === "left" || paddle.side === "right") {
         const x = paddle.side === "left" ? margin : this.width - margin;
         const y = paddle.pos * this.height;
-        ctx.moveTo(x, y - vLength / 2);
-        ctx.lineTo(x, y + vLength / 2);
+        ctx.moveTo(x, y - vLength / 2); ctx.lineTo(x, y + vLength / 2);
       } else {
         const y = paddle.side === "top" ? margin : this.height - margin;
         const x = paddle.pos * this.width;
-        ctx.moveTo(x - hLength / 2, y);
-        ctx.lineTo(x + hLength / 2, y);
+        ctx.moveTo(x - hLength / 2, y); ctx.lineTo(x + hLength / 2, y);
       }
       ctx.stroke();
       ctx.shadowBlur = 0;
     });
-
-    (this.balls || []).forEach((ball) => {
-      ball.trail.forEach((point, index) => {
-        ctx.globalAlpha = (1 - index / ball.trail.length) * 0.18;
-        ctx.fillStyle = COLORS.white;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, ball.r * (1 - index / 14), 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.globalAlpha = 1;
+    this.snapshot.balls.forEach((ball) => {
       ctx.fillStyle = COLORS.white;
       ctx.shadowColor = COLORS.white;
       ctx.shadowBlur = 14;
-      ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ball.x * this.width, ball.y * this.height, 8, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
     });
-
-    if (this.paused) {
-      ctx.fillStyle = "rgba(8,11,15,.72)";
+    if (this.snapshot.countdown > 0 && !this.snapshot.roundOver) {
+      ctx.fillStyle = "rgba(8,11,15,.4)";
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = COLORS.white;
-      ctx.font = "700 22px Manrope";
+      ctx.font = "800 72px Manrope";
       ctx.textAlign = "center";
-      ctx.fillText("PAUSED", this.width / 2, this.height / 2);
+      ctx.fillText(this.snapshot.countdown, this.width / 2, this.height / 2 + 24);
+    }
+    if (this.snapshot.roundOver) {
+      ctx.fillStyle = "rgba(8,11,15,.68)";
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.fillStyle = COLORS.white;
+      ctx.font = `800 ${Math.min(54, this.width / 12)}px Manrope`;
+      ctx.textAlign = "center";
+      ctx.fillText(`${this.snapshot.winner} wins`, this.width / 2, this.height / 2);
     }
   }
-}
 
+  ping(frequency, duration) {
+    if (!this.isSoundOn()) return;
+    try {
+      this.audio ||= new AudioContext();
+      const oscillator = this.audio.createOscillator();
+      const gain = this.audio.createGain();
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(.045, this.audio.currentTime);
+      gain.gain.exponentialRampToValueAtTime(.001, this.audio.currentTime + duration);
+      oscillator.connect(gain).connect(this.audio.destination);
+      oscillator.start();
+      oscillator.stop(this.audio.currentTime + duration);
+    } catch {}
+  }
+}

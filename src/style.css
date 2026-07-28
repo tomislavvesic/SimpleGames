@@ -139,15 +139,80 @@ footer { min-height: 140px; padding: 0 clamp(24px, 5vw, 76px); display: flex; ju
 .game-header { display: grid; grid-template-columns: 1fr auto 40px; align-items: center; padding: 0 2px 20px; }
 .game-header h2 { font-size: 26px; margin: 3px 0 0; }
 .game-kicker, .overlay-kicker { color: var(--orange); font: 500 9px "DM Mono"; letter-spacing: .14em; text-transform: uppercase; }
-.game-stats { display: flex; gap: 30px; color: #8f9496; text-transform: uppercase; font: 500 9px "DM Mono"; letter-spacing: .09em; }
+.game-stats { display: flex; gap: 30px; align-items: center; color: #8f9496; text-transform: uppercase; font: 500 9px "DM Mono"; letter-spacing: .09em; }
 .game-stats b { display: block; color: var(--ink); font-size: 17px; margin-top: 5px; letter-spacing: .03em; }
+.player-scores { display: flex; gap: 13px; text-transform: none; }
+.player-scores i { color: var(--player); font-style: normal; white-space: nowrap; }
+.player-scores b { display: inline; color: inherit; font-size: 15px; margin-left: 3px; }
 .close-game { justify-self: end; border: 1px solid var(--line); background: none; border-radius: 50%; width: 34px; height: 34px; font-size: 22px; cursor: pointer; color: #969a9b; }
 .canvas-wrap { position: relative; border: 1px solid var(--line); overflow: hidden; }
 #arena { display: block; width: 100%; aspect-ratio: 1.55; max-height: 68vh; }
-.game-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; background: rgba(9,13,19,.73); backdrop-filter: blur(4px); transition: opacity .2s; }
+.game-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; background: rgba(9,13,19,.88); backdrop-filter: blur(5px); transition: opacity .2s; overflow-y: auto; }
 .game-overlay.hidden { opacity: 0; pointer-events: none; }
-.game-overlay h3 { font-size: clamp(34px, 5vw, 58px); letter-spacing: -.055em; margin: 12px 0 8px; }
-.game-overlay > p { max-width: 500px; color: #a0a5a5; line-height: 1.6; font-size: 12px; }
+.game-overlay h3 { font-size: clamp(34px, 5vw, 52px); letter-spacing: -.055em; margin: 9px 0 6px; }
+.multiplayer-home, .room-lobby { width: min(720px, 100%); }
+.multiplayer-home > p { max-width: 500px; color: #a0a5a5; line-height: 1.6; font-size: 11px; margin: 0 auto 13px; }
+.name-field { display: block; width: min(330px, 100%); text-align: left; margin: auto; }
+.name-field > span { display: block; color: #8e9394; font: 500 8px "DM Mono"; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 5px; }
+.name-field input, .code-join input {
+  width: 100%; border: 1px solid rgba(255,255,255,.18); background: #111721; color: white;
+  padding: 10px 12px; outline: none; font-size: 12px; border-radius: 2px;
+}
+.name-field input:focus, .code-join input:focus { border-color: var(--blue); }
+.mode-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 12px 0 9px; }
+.mode-option { border: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.025); color: #a8acae; padding: 10px; cursor: pointer; text-align: left; }
+.mode-option b { display: block; color: var(--ink); font-size: 12px; }
+.mode-option span { display: block; font: 400 8px "DM Mono"; margin-top: 3px; }
+.mode-option.selected { border-color: var(--orange); background: rgba(255,114,94,.08); }
+.room-options { display: flex; justify-content: center; gap: 22px; margin: 8px 0 12px; }
+.room-options label { color: #a8acad; font: 400 9px "DM Mono"; cursor: pointer; }
+.room-options input { position: absolute; opacity: 0; }
+.room-options i { display: inline-block; width: 25px; height: 13px; border-radius: 10px; vertical-align: middle; margin-right: 6px; background: #3a3e45; position: relative; }
+.room-options i::after { content: ""; position: absolute; width: 9px; height: 9px; background: #929698; border-radius: 50%; top: 2px; left: 2px; transition: .18s; }
+.room-options input:checked + i { background: rgba(99,214,174,.35); }
+.room-options input:checked + i::after { left: 14px; background: var(--mint); }
+.join-actions { display: flex; justify-content: center; gap: 8px; }
+.join-actions .primary-button { padding-block: 11px; min-width: 158px; }
+.secondary-button, .ready-button {
+  border: 1px solid rgba(255,255,255,.18); background: transparent; color: var(--ink);
+  padding: 10px 18px; font-size: 10px; font-weight: 700; cursor: pointer;
+}
+.secondary-button:disabled, .primary-button:disabled { opacity: .45; cursor: not-allowed; }
+.code-join { display: grid; grid-template-columns: auto 110px auto; gap: 8px; align-items: center; justify-content: center; margin: 11px 0; }
+.code-join span { color: #7f8486; font: 400 8px "DM Mono"; }
+.code-join input { padding: 7px 9px; letter-spacing: .18em; text-transform: uppercase; }
+.code-join button, .public-title button { border: 0; background: none; color: var(--orange); cursor: pointer; font: 500 8px "DM Mono"; text-transform: uppercase; }
+.public-rooms { border-top: 1px solid rgba(255,255,255,.1); padding-top: 9px; }
+.public-title { display: flex; justify-content: space-between; color: #777d80; text-transform: uppercase; font: 500 8px "DM Mono"; letter-spacing: .1em; }
+.room-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; margin-top: 7px; max-height: 76px; overflow-y: auto; }
+.room-list > button { display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.025); padding: 7px 9px; color: var(--ink); cursor: pointer; text-align: left; }
+.room-list > button:hover { border-color: var(--blue); }
+.room-list span b { font-size: 10px; letter-spacing: .1em; }
+.room-list small { display: block; color: #777d80; font-size: 7px; margin-top: 2px; }
+.room-list i { font: 400 8px "DM Mono"; color: var(--mint); }
+.empty-rooms { grid-column: 1/-1; color: #747a7d; font: 400 8px "DM Mono"; padding: 6px; }
+.empty-rooms.error { color: var(--orange); }
+
+.room-lobby { text-align: left; }
+.room-lobby > .overlay-kicker { display: block; text-align: center; }
+.room-lobby > .overlay-kicker b { color: #8e9394; margin-left: 8px; }
+.lobby-code-row { display: flex; justify-content: space-between; align-items: end; margin: 20px 0 15px; }
+.lobby-code-row small { display: block; color: #777d80; text-transform: uppercase; font: 500 8px "DM Mono"; letter-spacing: .12em; }
+.lobby-code-row strong { display: block; color: white; font: 500 35px "DM Mono"; letter-spacing: .17em; margin-top: 4px; }
+.share-button { border: 1px solid rgba(255,255,255,.16); background: transparent; color: var(--mint); padding: 9px 12px; cursor: pointer; font: 500 8px "DM Mono"; text-transform: uppercase; }
+.lobby-slots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+.lobby-slot { display: grid; grid-template-columns: 8px 1fr auto; gap: 10px; align-items: center; border: 1px solid rgba(255,255,255,.12); padding: 12px; }
+.lobby-slot > i { width: 7px; height: 32px; background: var(--slot-color); border-radius: 5px; box-shadow: 0 0 12px var(--slot-color); }
+.lobby-slot b { display: block; font-size: 11px; }
+.lobby-slot small { display: block; color: #777d80; text-transform: uppercase; font: 500 7px "DM Mono"; margin-top: 3px; }
+.lobby-slot em { color: var(--mint); font: normal 500 8px "DM Mono"; }
+.lobby-slot.bot { opacity: .65; }
+.lobby-controls { display: flex; justify-content: center; gap: 8px; margin-top: 18px; }
+.ready-button.active { border-color: var(--mint); color: var(--mint); background: rgba(99,214,174,.08); }
+.lobby-controls .primary-button { padding-block: 11px; }
+.lobby-note { text-align: center; color: #747a7d; font: 400 8px "DM Mono"; margin: 10px 0 0; }
+.touch-controls { display: none; position: absolute; left: 50%; bottom: 45px; transform: translateX(-50%); gap: 12px; }
+.touch-controls button { width: 64px; height: 54px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,20,.7); color: white; font-size: 23px; border-radius: 5px; touch-action: none; }
 .controls-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 20px 0 25px; }
 .controls-grid span { min-width: 130px; border: 1px solid var(--line); padding: 10px; color: #9da1a2; font-size: 9px; text-align: left; }
 .controls-grid b { color: white; float: right; }
@@ -179,11 +244,26 @@ footer { min-height: 140px; padding: 0 clamp(24px, 5vw, 76px); display: flex; ju
   .controls-grid { grid-template-columns: 1fr 1fr; }
   .controls-grid span { min-width: 120px; }
   .game-header { grid-template-columns: 1fr auto; }
-  .game-stats { gap: 12px; }
+  .game-stats { gap: 12px; max-width: 58vw; }
+  .room-status { display: none; }
+  .player-scores { gap: 7px; overflow: hidden; }
+  .player-scores i { font-size: 7px; }
+  .player-scores b { font-size: 11px; }
   .close-game { position: absolute; top: 8px; right: 8px; }
   .game-dialog { margin: auto; }
   .game-shell { padding: 10px; }
   #arena { min-height: 480px; object-fit: cover; }
+  .game-overlay { justify-content: flex-start; padding: 22px 14px; }
+  .game-overlay h3 { font-size: 34px; }
+  .mode-picker { grid-template-columns: 1fr; }
+  .mode-option { padding: 8px 10px; }
+  .mode-option span { display: inline; margin-left: 7px; }
+  .join-actions { flex-direction: column; }
+  .join-actions button { width: 100%; }
+  .room-list { grid-template-columns: 1fr; }
+  .lobby-code-row { align-items: center; }
+  .lobby-code-row strong { font-size: 25px; }
+  .lobby-slots { grid-template-columns: 1fr; }
+  .touch-controls { display: flex; }
   footer { flex-direction: column; justify-content: center; gap: 25px; }
 }
-
