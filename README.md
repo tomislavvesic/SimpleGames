@@ -16,9 +16,11 @@ npm run build
 ```
 
 The generated `dist` directory can be deployed as a static site. For
-Cloudflare Pages use:
+Cloudflare Workers Builds use:
 
 - Build command: `npm run build`
-- Build output directory: `dist`
-- Root directory: `/`
+- Deploy command: `npm run deploy`
 - Node.js version: `22`
+
+`wrangler.jsonc` configures the contents of `dist` as static assets and
+enables single-page application fallback routing.
