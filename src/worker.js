@@ -217,6 +217,10 @@ export class GameRoom extends DurableObject {
     const player = this.players.get(attachment?.id);
     if (!player) return;
 
+    if (message.type === "ping") {
+      ws.send(JSON.stringify({ type: "pong", sentAt: message.sentAt }));
+      return;
+    }
     if (message.type === "input") {
       player.input = Math.max(-1, Math.min(1, Number(message.direction) || 0));
       return;
@@ -524,7 +528,7 @@ export class GameRoom extends DurableObject {
   }
 
   maybeBroadcast(now) {
-    if (now - this.lastBroadcast >= 50) {
+    if (now - this.lastBroadcast >= 30) {
       this.lastBroadcast = now;
       this.broadcastSnapshot();
     }

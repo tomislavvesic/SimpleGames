@@ -25,6 +25,13 @@ export class ArenaGame {
     this.side = null;
     this.socket = null;
     this.audio = null;
+    this.latency = 35;
+    this.lastDirection = 0;
+    this.pingTimer = setInterval(() => {
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.send({ type: "ping", sentAt: performance.now() });
+      }
+    }, 2000);
     this.frame = requestAnimationFrame(() => this.drawLoop());
 
     window.addEventListener("keydown", (event) => {
@@ -92,6 +99,7 @@ export class ArenaGame {
     this.socket = null;
     this.room = null;
     this.snapshot = null;
+    this.previousSnapshot = null;
     this.side = null;
     if (socket && socket.readyState < 2) socket.close(1000, "Left room");
   }
@@ -111,6 +119,7 @@ export class ArenaGame {
     }
     if (message.type === "lobby") {
       this.snapshot = null;
+      this.previousSnapshot = null;
       this.overlay.classList.remove("hidden");
       this.lobbyNode.classList.remove("hidden");
       this.onLobby(message, this.playerId);
@@ -123,6 +132,8 @@ export class ArenaGame {
       this.ping(620, 0.09);
     }
     if (message.type === "snapshot") {
+      this.previousSnapshot = this.snapshot;
+      message.receivedAt = performance.now();
       this.snapshot = message;
       this.updateScore(message);
       if (message.roundOver) {
@@ -130,13 +141,19 @@ export class ArenaGame {
         this.ping(740, 0.18);
       }
     }
+    if (message.type === "pong") {
+      const oneWay = Math.max(0, (performance.now() - message.sentAt) / 2);
+      this.latency = this.latency * 0.75 + Math.min(oneWay, 120) * 0.25;
+    }
     if (message.type === "return-lobby") {
       this.snapshot = null;
+      this.previousSnapshot = null;
       this.overlay.classList.remove("hidden");
     }
     if (message.type === "room-closed") {
       this.room = null;
       this.snapshot = null;
+      this.previousSnapshot = null;
       this.overlay.classList.remove("hidden");
       this.lobbyNode.classList.remove("hidden");
       this.lobbyNode.innerHTML = `
@@ -168,10 +185,12 @@ export class ArenaGame {
   bindTouch(button, direction) {
     const start = (event) => {
       event.preventDefault();
+      this.lastDirection = direction;
       this.send({ type: "input", direction });
     };
     const stop = (event) => {
       event.preventDefault();
+      this.lastDirection = 0;
       this.send({ type: "input", direction: 0 });
     };
     button.addEventListener("pointerdown", start);
@@ -225,8 +244,9 @@ export class ArenaGame {
     ctx.beginPath(); ctx.arc(this.width / 2, this.height / 2, Math.min(this.width, this.height) * .13, 0, Math.PI * 2); ctx.stroke();
 
     if (!this.snapshot) return;
+    const rendered = this.projectSnapshot(performance.now());
     const margin = 24;
-    const active = new Set(this.snapshot.paddles.filter((p) => !p.eliminated).map((p) => p.side));
+    const active = new Set(rendered.paddles.filter((p) => !p.eliminated).map((p) => p.side));
     const drawWall = (side) => {
       const vertical = side === "left" || side === "right";
       const total = vertical ? this.height : this.width;
@@ -254,7 +274,7 @@ export class ArenaGame {
     };
     ["left", "top", "right", "bottom"].forEach(drawWall);
 
-    this.snapshot.paddles.forEach((paddle) => {
+    rendered.paddles.forEach((paddle) => {
       if (paddle.eliminated) return;
       ctx.strokeStyle = paddle.color;
       ctx.shadowColor = paddle.color;
@@ -276,29 +296,58 @@ export class ArenaGame {
       ctx.stroke();
       ctx.shadowBlur = 0;
     });
-    this.snapshot.balls.forEach((ball) => {
+    rendered.balls.forEach((ball) => {
       ctx.fillStyle = COLORS.white;
       ctx.shadowColor = COLORS.white;
       ctx.shadowBlur = 14;
       ctx.beginPath(); ctx.arc(ball.x * this.width, ball.y * this.height, 8, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
     });
-    if (this.snapshot.countdown > 0 && !this.snapshot.roundOver) {
+    if (rendered.countdown > 0 && !rendered.roundOver) {
       ctx.fillStyle = "rgba(8,11,15,.4)";
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = COLORS.white;
       ctx.font = "800 72px Manrope";
       ctx.textAlign = "center";
-      ctx.fillText(this.snapshot.countdown, this.width / 2, this.height / 2 + 24);
+      ctx.fillText(rendered.countdown, this.width / 2, this.height / 2 + 24);
     }
-    if (this.snapshot.roundOver) {
+    if (rendered.roundOver) {
       ctx.fillStyle = "rgba(8,11,15,.68)";
       ctx.fillRect(0, 0, this.width, this.height);
       ctx.fillStyle = COLORS.white;
       ctx.font = `800 ${Math.min(54, this.width / 12)}px Manrope`;
       ctx.textAlign = "center";
-      ctx.fillText(`${this.snapshot.winner} wins`, this.width / 2, this.height / 2);
+      ctx.fillText(`${rendered.winner} wins`, this.width / 2, this.height / 2);
     }
+  }
+
+  projectSnapshot(now) {
+    const snapshot = this.snapshot;
+    const elapsed = Math.min(((now - snapshot.receivedAt) + this.latency) / 1000, 0.12);
+    const previous = this.previousSnapshot;
+    const snapshotDelta = previous?.receivedAt
+      ? Math.max((snapshot.receivedAt - previous.receivedAt) / 1000, 0.016)
+      : 0.05;
+
+    const paddles = snapshot.paddles.map((paddle) => {
+      if (paddle.eliminated) return paddle;
+      const old = previous?.paddles?.find((candidate) => candidate.side === paddle.side);
+      let velocity = old ? (paddle.pos - old.pos) / snapshotDelta : 0;
+      if (paddle.side === this.side) velocity = this.lastDirection * 0.66;
+      velocity = Math.max(-0.7, Math.min(0.7, velocity));
+      const min = 0.5 - GOAL_HALF[paddle.side] + PADDLE_HALF[paddle.side];
+      const max = 0.5 + GOAL_HALF[paddle.side] - PADDLE_HALF[paddle.side];
+      return { ...paddle, pos: Math.max(min, Math.min(max, paddle.pos + velocity * elapsed)) };
+    });
+
+    const balls = snapshot.countdown > 0 || snapshot.roundOver
+      ? snapshot.balls
+      : snapshot.balls.map((ball) => ({
+          ...ball,
+          x: ball.x + ball.vx * elapsed,
+          y: ball.y + ball.vy * elapsed,
+        }));
+    return { ...snapshot, paddles, balls };
   }
 
   ping(frequency, duration) {
