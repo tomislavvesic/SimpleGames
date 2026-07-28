@@ -1,0 +1,496 @@
+.owo-shell {
+  --owo-ink: var(--ink, #e9e9df);
+  --owo-muted: var(--muted, #9a9d9c);
+  --owo-line: var(--line, rgba(233, 233, 223, .12));
+  --owo-orange: var(--orange, #ff725e);
+  --owo-mint: var(--mint, #66d6ae);
+  --owo-yellow: var(--yellow, #ffd45c);
+  --owo-blue: var(--blue, #69a7ff);
+  width: 100%;
+  min-width: 0;
+  color: var(--owo-ink);
+  background: #0d1118;
+  font-family: "Manrope", system-ui, sans-serif;
+}
+
+.owo-shell *,
+.owo-shell *::before,
+.owo-shell *::after {
+  box-sizing: border-box;
+}
+
+.owo-header {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto 40px;
+  align-items: center;
+  gap: 24px;
+  padding: 3px 2px 20px;
+}
+
+.owo-title h2 {
+  margin: 3px 0 0;
+  color: var(--owo-ink);
+  font-size: clamp(22px, 3vw, 28px);
+  line-height: 1;
+  letter-spacing: -.045em;
+}
+
+.owo-kicker,
+.owo-overlay-kicker {
+  color: var(--owo-orange);
+  font: 500 9px/1.2 "DM Mono", monospace;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.owo-stats {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+}
+
+.owo-stats > div {
+  min-width: 76px;
+  padding: 1px 16px;
+  border-left: 1px solid var(--owo-line);
+}
+
+.owo-stats dt {
+  margin: 0 0 4px;
+  color: #747b7d;
+  font: 500 8px/1 "DM Mono", monospace;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.owo-stats dd {
+  margin: 0;
+  color: var(--owo-ink);
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.owo-stats > div:nth-child(3) dd { color: var(--owo-yellow); }
+.owo-stats > div:nth-child(4) dd { color: var(--owo-mint); }
+
+.owo-icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--owo-line);
+  border-radius: 50%;
+  color: #a4a8a8;
+  background: transparent;
+  font: 300 23px/1 system-ui, sans-serif;
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.owo-icon-button:hover {
+  color: white;
+  border-color: rgba(255, 255, 255, .35);
+  transform: rotate(5deg);
+}
+
+.owo-stage {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--owo-line);
+  border-radius: 2px;
+  background: #0b1015;
+}
+
+.owo-stage canvas {
+  display: block;
+  width: 100%;
+  height: min(62vh, 650px);
+  min-height: 410px;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.owo-stage canvas:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--owo-blue);
+}
+
+.owo-clock {
+  position: absolute;
+  z-index: 4;
+  top: 16px;
+  left: 50%;
+  width: min(300px, calc(100% - 100px));
+  height: 4px;
+  overflow: visible;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .1);
+  transform: translateX(-50%);
+}
+
+.owo-clock > div {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--owo-orange), var(--owo-yellow), var(--owo-mint));
+  box-shadow: 0 0 12px rgba(102, 214, 174, .45);
+  transform: scaleX(1);
+  transform-origin: left center;
+  transition: transform .1s linear;
+}
+
+.owo-clock > span {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  color: rgba(233, 233, 223, .68);
+  font: 500 8px/1 "DM Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .08em;
+  transform: translateX(-50%);
+}
+
+.owo-clock.urgent > div {
+  background: var(--owo-orange);
+  box-shadow: 0 0 14px rgba(255, 114, 94, .65);
+  animation: owo-clock-pulse .55s ease-in-out infinite alternate;
+}
+
+.owo-clock.urgent > span {
+  color: #ffd8d2;
+}
+
+@keyframes owo-clock-pulse {
+  to { opacity: .45; }
+}
+
+.owo-overlay {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 30px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(105, 167, 255, .1), transparent 42%),
+    rgba(7, 10, 15, .82);
+  backdrop-filter: blur(5px);
+}
+
+.owo-overlay[hidden] {
+  display: none;
+}
+
+.owo-overlay-card {
+  width: min(520px, 100%);
+}
+
+.owo-overlay h3 {
+  margin: 12px 0 8px;
+  color: var(--owo-ink);
+  font-size: clamp(34px, 6vw, 58px);
+  line-height: .95;
+  letter-spacing: -.06em;
+}
+
+.owo-overlay p {
+  max-width: 430px;
+  margin: 0 auto;
+  color: #9ca1a1;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.owo-overlay-actions {
+  display: flex;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.owo-primary-button,
+.owo-secondary-button {
+  min-height: 44px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.owo-primary-button {
+  display: inline-flex;
+  min-width: 178px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  padding: 12px 15px 12px 18px;
+  border: 0;
+  color: #11151d;
+  background: var(--owo-ink);
+  transition: background .18s ease, transform .18s ease;
+}
+
+.owo-primary-button:hover {
+  background: white;
+  transform: translateY(-2px);
+}
+
+.owo-primary-button span {
+  color: var(--owo-orange);
+  font-size: 18px;
+}
+
+.owo-secondary-button {
+  padding: 11px 17px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  color: var(--owo-ink);
+  background: transparent;
+}
+
+.owo-secondary-button:hover {
+  border-color: var(--owo-mint);
+  color: var(--owo-mint);
+}
+
+.owo-controls {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 24px;
+  min-height: 82px;
+  padding: 12px 2px 0;
+}
+
+.owo-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 34px);
+  grid-template-rows: repeat(3, 30px);
+  grid-template-areas:
+    ". up ."
+    "left core right"
+    ". down .";
+  align-content: center;
+}
+
+.owo-dpad button {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .16);
+  color: #c8ccca;
+  background: #141a22;
+  font: 500 15px/1 system-ui, sans-serif;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.owo-dpad button:hover,
+.owo-dpad button:focus-visible,
+.owo-dpad button:active {
+  z-index: 2;
+  border-color: var(--owo-yellow);
+  color: var(--owo-yellow);
+  background: rgba(255, 212, 92, .08);
+  outline: none;
+}
+
+.owo-dpad button[data-owo-direction="up"] { grid-area: up; }
+.owo-dpad button[data-owo-direction="left"] { grid-area: left; }
+.owo-dpad button[data-owo-direction="right"] { grid-area: right; }
+.owo-dpad button[data-owo-direction="down"] { grid-area: down; }
+
+.owo-dpad > span {
+  display: grid;
+  grid-area: core;
+  place-items: center;
+  color: var(--owo-yellow);
+  background: #141a22;
+  font-size: 8px;
+}
+
+.owo-controls > p {
+  margin: 0;
+  color: #777d7e;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.owo-controls > p b {
+  display: block;
+  color: #cfd1cd;
+  font-size: 11px;
+}
+
+.owo-controls > p span {
+  display: block;
+}
+
+.owo-run-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.owo-run-actions button {
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid var(--owo-line);
+  color: #969b9b;
+  background: transparent;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.owo-run-actions button:hover,
+.owo-run-actions button:focus-visible {
+  border-color: rgba(255, 255, 255, .35);
+  color: var(--owo-ink);
+  outline: none;
+}
+
+.owo-run-actions kbd {
+  margin-left: 5px;
+  padding: 2px 4px;
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 2px;
+  color: #727779;
+  background: #151a21;
+  font: 500 8px/1 "DM Mono", monospace;
+}
+
+.owo-live-region {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .owo-header {
+    grid-template-columns: 1fr 38px;
+    gap: 12px;
+    padding: 5px 2px 14px;
+  }
+
+  .owo-stats {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    order: 3;
+  }
+
+  .owo-stats > div {
+    min-width: 0;
+    padding: 3px 10px;
+  }
+
+  .owo-stats > div:first-child {
+    border-left: 0;
+    padding-left: 1px;
+  }
+
+  .owo-close {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .owo-stage canvas {
+    height: min(59vh, 560px);
+    min-height: 390px;
+  }
+
+  .owo-controls {
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+    min-height: 138px;
+  }
+
+  .owo-dpad {
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, 44px);
+  }
+
+  .owo-dpad button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .owo-run-actions {
+    grid-column: 2;
+  }
+
+  .owo-run-actions button {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .owo-stats dd {
+    font-size: 13px;
+  }
+
+  .owo-stage canvas {
+    height: min(57vh, 500px);
+    min-height: 365px;
+  }
+
+  .owo-clock {
+    top: 12px;
+    width: min(220px, calc(100% - 70px));
+  }
+
+  .owo-overlay {
+    padding: 20px;
+  }
+
+  .owo-overlay h3 {
+    font-size: 36px;
+  }
+
+  .owo-overlay-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .owo-primary-button {
+    width: 100%;
+  }
+
+  .owo-controls {
+    grid-template-columns: 132px 1fr;
+  }
+
+  .owo-controls > p {
+    font-size: 9px;
+  }
+
+  .owo-run-actions {
+    gap: 5px;
+  }
+
+  .owo-run-actions button {
+    flex: 1;
+    padding-inline: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .owo-shell *,
+  .owo-shell *::before,
+  .owo-shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}

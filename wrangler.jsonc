@@ -18,6 +18,10 @@
       {
         "name": "LOBBY_DIRECTORY",
         "class_name": "LobbyDirectory"
+      },
+      {
+        "name": "SIGNAL_ROOMS",
+        "class_name": "SignalRoom"
       }
     ]
   },
@@ -25,6 +29,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["GameRoom", "LobbyDirectory"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["SignalRoom"]
     }
   ]
 }

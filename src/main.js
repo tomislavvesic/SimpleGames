@@ -1,5 +1,11 @@
 import "./style.css";
+import "./signal-game.css";
+import "./player-profile.css";
+import "./maze-game.css";
 import { ArenaGame } from "./arena.js";
+import { SignalGame } from "./signal-game.js";
+import { ProfileController, ProfileStore } from "./player-profile.js";
+import { OneWayOutGame } from "./maze-game.js";
 
 const app = document.querySelector("#app");
 
@@ -62,23 +68,27 @@ app.innerHTML = `
           </div>
         </article>
 
-        <article class="game-card coming">
+        <article class="game-card">
           <div class="card-art rhythm-art"><span>♪</span><span>●</span><span>♪</span></div>
           <div class="card-body">
             <div class="tags"><span>Co-op</span><span>2–4 players</span></div>
             <h3>Signal Crew</h3>
             <p>Keep a tiny station alive together. Match the signals before the whole system goes dark.</p>
-            <span class="soon-label">Coming soon</span>
+            <button class="play-button" type="button" data-play-signal>
+              Play now <span>↗</span>
+            </button>
           </div>
         </article>
 
-        <article class="game-card coming">
+        <article class="game-card">
           <div class="card-art maze-art"><div></div><span>◆</span></div>
           <div class="card-body">
             <div class="tags"><span>Solo</span><span>1 player</span></div>
             <h3>One Way Out</h3>
             <p>A tiny maze that changes every time you blink. Find the exit before time does.</p>
-            <span class="soon-label">Coming soon</span>
+            <button class="play-button" type="button" data-play-maze>
+              Play now <span>↗</span>
+            </button>
           </div>
         </article>
       </div>
@@ -104,13 +114,13 @@ app.innerHTML = `
           <h2>Four Sides</h2>
         </div>
         <div class="game-stats">
-          <span class="room-status">Status <b data-status>Choose a room</b></span>
+          <span class="room-status">Status <b data-status role="status" aria-live="polite">Choose a room</b></span>
           <div class="player-scores" data-score></div>
         </div>
         <button class="close-game" type="button" aria-label="Close game">×</button>
       </header>
       <div class="canvas-wrap">
-        <canvas id="arena" width="900" height="620"></canvas>
+        <canvas id="arena" width="900" height="620" role="img" aria-label="Four Sides arena">Your browser does not support the Four Sides game canvas.</canvas>
         <div class="game-overlay" data-overlay>
           <div class="invite-join hidden" data-invite-join>
             <span class="overlay-kicker">You have been invited</span>
@@ -135,9 +145,9 @@ app.innerHTML = `
               <input type="text" maxlength="18" placeholder="Player name" data-player-name autocomplete="nickname" />
             </label>
             <div class="mode-picker" data-mode-picker>
-              <button class="mode-option selected" type="button" data-mode="duel"><b>1 vs 1</b><span>Left & right</span></button>
-              <button class="mode-option" type="button" data-mode="teams"><b>2 vs 2</b><span>Team battle</span></button>
-              <button class="mode-option" type="button" data-mode="ffa"><b>4-way</b><span>Every side for itself</span></button>
+              <button class="mode-option selected" type="button" data-mode="duel" aria-pressed="true"><b>1 vs 1</b><span>Left & right</span></button>
+              <button class="mode-option" type="button" data-mode="teams" aria-pressed="false"><b>2 vs 2</b><span>Team battle</span></button>
+              <button class="mode-option" type="button" data-mode="ffa" aria-pressed="false"><b>4-way</b><span>Every side for itself</span></button>
             </div>
             <div class="room-options">
               <label><input type="checkbox" data-public checked /><i></i> Public room</label>
@@ -172,14 +182,24 @@ app.innerHTML = `
             <p class="lobby-note" data-lobby-note>Waiting for the host…</p>
           </div>
         </div>
-        <div class="touch-controls" aria-label="Touch controls">
+        <div class="touch-controls" aria-label="Touch controls" aria-hidden="true">
           <button type="button" data-move="-1" aria-label="Move backward">←</button>
           <button type="button" data-move="1" aria-label="Move forward">→</button>
+        </div>
+        <div class="four-result hidden" data-four-result role="status" aria-live="polite">
+          <span class="overlay-kicker">Round complete</span>
+          <h3 data-four-result-title>Winner</h3>
+          <p data-four-result-copy></p>
+          <button class="primary-button" type="button" data-four-rematch>Vote rematch <span>↻</span></button>
+          <small data-four-rematch-status></small>
         </div>
       </div>
       <p class="game-hint">Move with arrows or WASD · Defend your goal · Every miss costs one of your five lives</p>
     </div>
   </dialog>
+
+  <dialog class="signal-dialog" aria-label="Signal Crew game"></dialog>
+  <dialog class="maze-dialog" aria-label="One Way Out game"><div data-maze-root></div></dialog>
 `;
 
 const soundButton = document.querySelector(".sound-button");
@@ -189,6 +209,16 @@ soundButton.addEventListener("click", () => {
   soundButton.classList.toggle("muted", !soundOn);
   document.querySelector(".sound-label").textContent = soundOn ? "Sound on" : "Sound off";
 });
+
+const profileStore = new ProfileStore();
+const profileUI = new ProfileController({
+  store: profileStore,
+  gameLabels: {
+    "four-sides": "Four Sides",
+    "signal-crew": "Signal Crew",
+    "one-way-out": "One Way Out",
+  },
+}).mount(document.querySelector(".site-header"));
 
 const dialog = document.querySelector(".game-dialog");
 const homeNode = document.querySelector("[data-multiplayer-home]");
@@ -206,15 +236,28 @@ const game = new ArenaGame({
   statusNode: document.querySelector("[data-status]"),
   overlay: document.querySelector("[data-overlay]"),
   lobbyNode,
+  resultNode: document.querySelector("[data-four-result]"),
   isSoundOn: () => soundOn,
   onLobby: renderLobby,
+  onResult: ({ won, lives }) => {
+    profileUI.recordGame("four-sides", { outcome: won ? "win" : "loss", score: lives });
+  },
+  onConnectionFailure: (message) => {
+    const inviteButton = document.querySelector("[data-invite-ready]");
+    inviteButton.disabled = false;
+    inviteButton.innerHTML = `I am ready <span>→</span>`;
+    document.querySelector("[data-invite-code]").textContent = message;
+  },
 });
 
-nameInput.value = game.name;
-inviteNameInput.value = game.name;
+nameInput.value = profileStore.nickname || game.name;
+inviteNameInput.value = profileStore.nickname || game.name;
+profileUI.bindNicknameInput(nameInput);
+profileUI.bindNicknameInput(inviteNameInput);
 
 document.querySelector("[data-play]").addEventListener("click", async () => {
   dialog.showModal();
+  game.startRendering();
   game.resize();
   await showRoomHome();
 });
@@ -228,7 +271,11 @@ document.querySelector(".close-game").addEventListener("click", () => {
 document.querySelectorAll("[data-mode]").forEach((button) => {
   button.addEventListener("click", () => {
     selectedMode = button.dataset.mode;
-    document.querySelectorAll("[data-mode]").forEach((item) => item.classList.toggle("selected", item === button));
+    document.querySelectorAll("[data-mode]").forEach((item) => {
+      const selected = item === button;
+      item.classList.toggle("selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
   });
 });
 
@@ -240,7 +287,11 @@ document.querySelector("[data-create-room]").addEventListener("click", async (ev
       isPublic: document.querySelector("[data-public]").checked,
       bots: document.querySelector("[data-bots]").checked,
     });
-    game.join(room.code, nameInput.value);
+    game.join(room.code, nameInput.value, {
+      ownerToken: room.ownerToken,
+      ownerPlayerId: room.ownerPlayerId,
+      ownerAuthToken: room.ownerAuthToken,
+    });
   });
 });
 
@@ -248,7 +299,11 @@ document.querySelector("[data-quick-play]").addEventListener("click", async (eve
   await withLoading(event.currentTarget, async () => {
     requireName();
     const room = await game.quickPlay(selectedMode);
-    game.join(room.code, nameInput.value);
+    game.join(room.code, nameInput.value, {
+      ownerToken: room.ownerToken || null,
+      ownerPlayerId: room.ownerPlayerId || null,
+      ownerAuthToken: room.ownerAuthToken || null,
+    });
   });
 });
 
@@ -284,13 +339,24 @@ document.querySelector("[data-ready]").addEventListener("click", (event) => {
 });
 document.querySelector("[data-start-match]").addEventListener("click", () => game.send({ type: "start" }));
 document.querySelector("[data-copy-link]").addEventListener("click", async (event) => {
-  await navigator.clipboard.writeText(`${location.origin}/?room=${latestLobby.code}`);
-  event.currentTarget.textContent = "Link copied!";
+  const copied = await copyText(`${location.origin}/?room=${latestLobby.code}`);
+  event.currentTarget.textContent = copied ? "Link copied!" : "Copy failed";
   setTimeout(() => (event.currentTarget.textContent = "Copy invite link"), 1600);
 });
 document.querySelectorAll("[data-move]").forEach((button) => game.bindTouch(button, Number(button.dataset.move)));
+document.querySelector("[data-four-rematch]").addEventListener("click", (event) => {
+  const active = !event.currentTarget.classList.contains("voted");
+  event.currentTarget.classList.toggle("voted", active);
+  event.currentTarget.innerHTML = active ? "Rematch voted <span>✓</span>" : "Vote rematch <span>↻</span>";
+  game.send({ type: "rematch", vote: active });
+});
 
-dialog.addEventListener("cancel", () => game.disconnect());
+dialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  game.disconnect();
+  history.replaceState({}, "", location.pathname);
+  dialog.close();
+});
 window.addEventListener("resize", () => game.resize());
 
 async function showRoomHome() {
@@ -342,6 +408,8 @@ function renderLobby(lobby, playerId) {
   homeNode.classList.add("hidden");
   inviteNode.classList.add("hidden");
   lobbyNode.classList.remove("hidden");
+  lobbyNode.querySelector(".lobby-controls")?.classList.remove("hidden");
+  lobbyNode.querySelector("[data-copy-link]")?.classList.remove("hidden");
   document.querySelector("[data-lobby-code]").textContent = lobby.code;
   document.querySelector("[data-lobby-mode]").textContent = lobby.modeLabel;
   const me = lobby.players.find((player) => player.id === playerId);
@@ -360,7 +428,7 @@ function renderLobby(lobby, playerId) {
   const startButton = document.querySelector("[data-start-match]");
   startButton.classList.toggle("hidden", !isHost);
   const humans = lobby.players.filter((player) => !player.bot && player.name !== "Open slot");
-  const canStart = (humans.length >= 2 || lobby.bots || lobby.players.some((player) => player.bot))
+  const canStart = lobby.players.every((player) => player.name !== "Open slot")
     && humans.every((player) => player.id === lobby.hostId || player.ready);
   startButton.disabled = !canStart;
   document.querySelector("[data-lobby-note]").textContent = isHost
@@ -387,6 +455,7 @@ function requireName() {
     nameInput.focus();
     throw new Error("Add your name first");
   }
+  profileStore.setIdentity({ nickname: nameInput.value.trim() });
 }
 
 function showLobbyError(message) {
@@ -402,9 +471,74 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 }
 
+async function copyText(value) {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    const input = document.createElement("textarea");
+    input.value = value;
+    input.setAttribute("readonly", "");
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.append(input);
+    input.select();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    }
+    input.remove();
+    return copied;
+  }
+}
+
 const sharedRoom = new URLSearchParams(location.search).get("room");
 if (sharedRoom) {
   dialog.showModal();
+  game.startRendering();
   game.resize();
   showRoomHome();
 }
+
+const signalDialog = document.querySelector(".signal-dialog");
+const signalGame = new SignalGame({
+  dialog: signalDialog,
+  getPlayerName: () => profileStore.nickname,
+  savePlayerName: (name) => profileStore.setIdentity({ nickname: name }),
+  isSoundOn: () => soundOn,
+  onResult: ({ won, score }) => {
+    profileUI.recordGame("signal-crew", { outcome: won ? "win" : "loss", score });
+  },
+});
+profileUI.bindNicknameInput(signalDialog.querySelector("[data-signal-name]"));
+profileUI.bindNicknameInput(signalDialog.querySelector("[data-signal-invite-name]"));
+
+document.querySelector("[data-play-signal]").addEventListener("click", () => signalGame.open());
+if (new URLSearchParams(location.search).get("signal")) signalGame.open();
+
+const mazeDialog = document.querySelector(".maze-dialog");
+const mazeGame = new OneWayOutGame({
+  root: mazeDialog.querySelector("[data-maze-root]"),
+  isSoundOn: () => soundOn,
+  onResult: (result) => {
+    profileUI.recordGame("one-way-out", {
+      outcome: result.outcome,
+      score: result.score,
+      durationMs: result.durationMs,
+    });
+  },
+  onClose: () => {
+    if (mazeDialog.open) mazeDialog.close();
+  },
+});
+
+document.querySelector("[data-play-maze]").addEventListener("click", () => {
+  mazeDialog.showModal();
+  mazeGame.start({ reset: !mazeGame.maze });
+});
+mazeDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  mazeGame.close();
+});

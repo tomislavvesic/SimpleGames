@@ -1,0 +1,68 @@
+name: Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests and production build
+        run: npm run build
+
+      - name: Validate the Cloudflare bundle
+        run: npm run check:deploy
+
+      - name: Install headless Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Start the local Worker
+        run: |
+          npx wrangler dev --local --port 8791 > wrangler-ci.log 2>&1 &
+          echo $! > wrangler-ci.pid
+          for attempt in {1..45}; do
+            if curl --fail --silent http://127.0.0.1:8791/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat wrangler-ci.log
+          exit 1
+
+      - name: Browser smoke tests
+        run: npm run test:browser
+
+      - name: Real WebSocket integration tests
+        run: npm run test:integration
+
+      - name: Show Worker log after a failure
+        if: failure()
+        run: cat wrangler-ci.log
+
+      - name: Stop the local Worker
+        if: always()
+        run: |
+          if test -f wrangler-ci.pid; then
+            kill "$(cat wrangler-ci.pid)" || true
+          fi

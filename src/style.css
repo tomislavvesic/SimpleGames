@@ -14,6 +14,7 @@
 }
 
 * { box-sizing: border-box; }
+.hidden { display: none !important; }
 html { scroll-behavior: smooth; }
 body { margin: 0; min-width: 320px; background: #0d1017; }
 button, a { font: inherit; }
@@ -133,8 +134,10 @@ h1 em { color: var(--orange); font-style: normal; }
 footer { min-height: 140px; padding: 0 clamp(24px, 5vw, 76px); display: flex; justify-content: space-between; align-items: center; color: #777b80; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
 .footer-brand { color: var(--ink); }
 
-.game-dialog { width: min(1100px, calc(100% - 24px)); max-width: none; padding: 0; border: 1px solid rgba(255,255,255,.18); border-radius: 4px; color: var(--ink); background: #0d1118; box-shadow: 0 30px 100px #000; }
+.game-dialog { width: min(1100px, calc(100% - 24px)); max-width: none; max-height: calc(100dvh - 24px); overflow: auto; padding: 0; border: 1px solid rgba(255,255,255,.18); border-radius: 4px; color: var(--ink); background: #0d1118; box-shadow: 0 30px 100px #000; }
 .game-dialog::backdrop { background: rgba(3,5,8,.87); backdrop-filter: blur(8px); }
+.maze-dialog { width: min(1050px, calc(100% - 24px)); max-width: none; max-height: calc(100dvh - 24px); overflow: auto; padding: 18px; border: 1px solid rgba(255,255,255,.18); border-radius: 4px; color: var(--ink); background: #0d1118; box-shadow: 0 30px 100px #000; }
+.maze-dialog::backdrop { background: rgba(3,5,8,.87); backdrop-filter: blur(8px); }
 .game-shell { padding: 22px; }
 .game-header { display: grid; grid-template-columns: 1fr auto 40px; align-items: center; padding: 0 2px 20px; }
 .game-header h2 { font-size: 26px; margin: 3px 0 0; }
@@ -146,8 +149,8 @@ footer { min-height: 140px; padding: 0 clamp(24px, 5vw, 76px); display: flex; ju
 .player-scores b { display: inline; color: inherit; font-size: 15px; margin-left: 3px; }
 .player-scores i.eliminated { opacity: .35; text-decoration: line-through; }
 .close-game { justify-self: end; border: 1px solid var(--line); background: none; border-radius: 50%; width: 34px; height: 34px; font-size: 22px; cursor: pointer; color: #969a9b; }
-.canvas-wrap { position: relative; border: 1px solid var(--line); overflow: hidden; }
-#arena { display: block; width: 100%; aspect-ratio: 1.55; max-height: 68vh; }
+.canvas-wrap { position: relative; width: min(100%, 98.7vh); margin-inline: auto; border: 1px solid var(--line); overflow: hidden; }
+#arena { display: block; width: 100%; height: auto; aspect-ratio: 900 / 620; }
 .game-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; background: rgba(9,13,19,.88); backdrop-filter: blur(5px); transition: opacity .2s; overflow-y: auto; }
 .game-overlay.hidden { opacity: 0; pointer-events: none; }
 .game-overlay h3 { font-size: clamp(34px, 5vw, 52px); letter-spacing: -.055em; margin: 9px 0 6px; }
@@ -158,6 +161,7 @@ footer { min-height: 140px; padding: 0 clamp(24px, 5vw, 76px); display: flex; ju
 .invite-ready-button { margin: 18px auto 0; }
 .invite-room-code { display: block; margin-top: 12px; color: #656b6e; font: 500 8px "DM Mono"; letter-spacing: .14em; text-transform: uppercase; }
 .closed-room { text-align: center; }
+.lobby-slots > .closed-room { grid-column: 1 / -1; padding: 18px; border: 1px solid rgba(255,255,255,.12); }
 .name-field { display: block; width: min(330px, 100%); text-align: left; margin: auto; }
 .name-field > span { display: block; color: #8e9394; font: 500 8px "DM Mono"; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 5px; }
 .name-field input, .code-join input {
@@ -217,8 +221,23 @@ footer { min-height: 140px; padding: 0 clamp(24px, 5vw, 76px); display: flex; ju
 .ready-button.active { border-color: var(--mint); color: var(--mint); background: rgba(99,214,174,.08); }
 .lobby-controls .primary-button { padding-block: 11px; }
 .lobby-note { text-align: center; color: #747a7d; font: 400 8px "DM Mono"; margin: 10px 0 0; }
-.touch-controls { display: none; position: absolute; left: 50%; bottom: 45px; transform: translateX(-50%); gap: 12px; }
-.touch-controls button { width: 64px; height: 54px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,20,.7); color: white; font-size: 23px; border-radius: 5px; touch-action: none; }
+.touch-controls { display: none; position: absolute; z-index: 3; left: 50%; bottom: 18px; transform: translateX(-50%); gap: 12px; }
+.touch-controls button { width: 68px; height: 58px; border: 1px solid rgba(255,255,255,.38); background: rgba(10,14,20,.82); color: white; font-size: 25px; border-radius: 5px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.touch-controls button.pressed { border-color: var(--mint); background: rgba(99,214,174,.25); transform: translateY(1px); }
+.four-result { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; background: rgba(8,12,18,.88); backdrop-filter: blur(6px); }
+.four-result h3 { font-size: clamp(36px, 6vw, 60px); letter-spacing: -.055em; margin: 12px 0 5px; }
+.four-result p { color: #9ba0a1; font-size: 11px; }
+.four-result .primary-button { margin: 14px 0 9px; }
+.four-result .primary-button.voted { background: var(--mint); }
+.four-result small { color: #747a7d; font: 400 8px "DM Mono"; }
+.arena-impact { animation: arena-impact .22s ease-out; }
+@keyframes arena-impact {
+  0% { transform: translate(0); }
+  25% { transform: translate(-3px, 2px); }
+  50% { transform: translate(3px, -2px); }
+  75% { transform: translate(-1px, 1px); }
+  100% { transform: translate(0); }
+}
 .controls-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 20px 0 25px; }
 .controls-grid span { min-width: 130px; border: 1px solid var(--line); padding: 10px; color: #9da1a2; font-size: 9px; text-align: left; }
 .controls-grid b { color: white; float: right; }
@@ -258,7 +277,7 @@ footer { min-height: 140px; padding: 0 clamp(24px, 5vw, 76px); display: flex; ju
   .close-game { position: absolute; top: 8px; right: 8px; }
   .game-dialog { margin: auto; }
   .game-shell { padding: 10px; }
-  #arena { min-height: 480px; object-fit: cover; }
+  #arena { height: auto; min-height: 0; max-height: none; aspect-ratio: 900 / 620; }
   .game-overlay { justify-content: flex-start; padding: 22px 14px; }
   .game-overlay h3 { font-size: 34px; }
   .mode-picker { grid-template-columns: 1fr; }
@@ -270,6 +289,14 @@ footer { min-height: 140px; padding: 0 clamp(24px, 5vw, 76px); display: flex; ju
   .lobby-code-row { align-items: center; }
   .lobby-code-row strong { font-size: 25px; }
   .lobby-slots { grid-template-columns: 1fr; }
-  .touch-controls { display: flex; }
   footer { flex-direction: column; justify-content: center; gap: 25px; }
+}
+
+@media (pointer: coarse) {
+  .canvas-wrap.is-playing .touch-controls { display: flex; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .arena-impact { animation: none; }
 }
