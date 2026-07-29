@@ -4,7 +4,9 @@ export const PADDLE_HALF = { left: 0.082, right: 0.082, top: 0.056, bottom: 0.05
 export const ARENA_EDGE = 0.032;
 export const BALL_RADIUS = { x: 0.009, y: 0.013 };
 export const MIN_BALL_SPEED = 0.42;
-export const MAX_BALL_SPEED = 0.92;
+// Velocity is intentionally uncapped. These limits bound collision work, not speed.
+const MAX_COLLISION_STEP = 0.008;
+const MAX_COLLISION_SUBSTEPS = 512;
 
 export function paddleFor(paddles, side) {
   const paddle = Array.isArray(paddles)
@@ -81,10 +83,10 @@ function hitPaddle(ball, paddle, side) {
   ball.lastHit = side;
   const offset = Math.max(-1, Math.min(1, (along - paddle.pos) / PADDLE_HALF[side]));
   const angle = offset * Math.PI * 0.36;
-  const speed = Math.min(
-    Math.max(MIN_BALL_SPEED, Math.hypot(ball.vx, ball.vy)) + 0.035 + Math.abs(offset) * 0.012,
-    MAX_BALL_SPEED,
-  );
+  const speed =
+    Math.max(MIN_BALL_SPEED, Math.hypot(ball.vx, ball.vy))
+    + 0.035
+    + Math.abs(offset) * 0.012;
   placeInsideArena(ball, side);
   if (side === "left") {
     ball.vx = Math.cos(angle) * speed;
@@ -113,8 +115,21 @@ export function resolveArenaCollisions(ball, paddles) {
   const hitSides = [];
   const wallSides = [];
   if (ball.pendingGoal) {
+    const goal = fullyEnteredGoal(ball, ball.pendingGoal) ? ball.pendingGoal : null;
+    if (!goal) {
+      for (const side of FOUR_SIDES) {
+        if (
+          side !== ball.pendingGoal
+          && isMovingOutward(ball, side)
+          && reachedPlane(ball, side)
+        ) {
+          reflectFromWall(ball, side);
+          wallSides.push(side);
+        }
+      }
+    }
     return {
-      goal: fullyEnteredGoal(ball, ball.pendingGoal) ? ball.pendingGoal : null,
+      goal,
       hitSides,
       wallSides,
     };
@@ -147,9 +162,33 @@ export function resolveArenaCollisions(ball, paddles) {
 }
 
 export function advanceArenaBall(ball, paddles, dt) {
-  ball.x += ball.vx * dt;
-  ball.y += ball.vy * dt;
-  return resolveArenaCollisions(ball, paddles);
+  const duration = Number.isFinite(dt) ? Math.max(0, dt) : 0;
+  const speed = Math.hypot(ball.vx, ball.vy);
+  const distance = Number.isFinite(speed) ? speed * duration : 0;
+  const substeps = Math.max(
+    1,
+    Math.min(MAX_COLLISION_SUBSTEPS, Math.ceil(distance / MAX_COLLISION_STEP)),
+  );
+  const stepDuration = duration / substeps;
+  const hitSides = new Set();
+  const wallSides = new Set();
+
+  for (let step = 0; step < substeps; step += 1) {
+    ball.x += ball.vx * stepDuration;
+    ball.y += ball.vy * stepDuration;
+    const result = resolveArenaCollisions(ball, paddles);
+    result.hitSides.forEach((side) => hitSides.add(side));
+    result.wallSides.forEach((side) => wallSides.add(side));
+    if (result.goal) {
+      return {
+        goal: result.goal,
+        hitSides: [...hitSides],
+        wallSides: [...wallSides],
+      };
+    }
+  }
+
+  return { goal: null, hitSides: [...hitSides], wallSides: [...wallSides] };
 }
 
 export function reflectedCoordinate(value, min, max) {

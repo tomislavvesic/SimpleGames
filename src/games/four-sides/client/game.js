@@ -215,6 +215,7 @@ export class ArenaGame {
     this.side = null;
     this.keys.clear();
     this.lastDirection = 0;
+    this.particles = [];
     this.resultNode?.classList.add("hidden");
     if (this.resultNode) this.resultNode.inert = true;
     this.canvasWrap?.classList.remove("is-playing");
@@ -620,7 +621,7 @@ export class ArenaGame {
       if (bounced) {
         const color = current.paddles.find((paddle) => paddle.side === ball.lastHit)?.color || COLORS.white;
         this.burst(ball.x, ball.y, color, 8);
-        this.ping(360 + Math.hypot(ball.vx, ball.vy) * 260, 0.035);
+        this.ping(Math.min(1600, 360 + Math.hypot(ball.vx, ball.vy) * 260), 0.035);
       }
     });
     current.paddles.forEach((paddle) => {

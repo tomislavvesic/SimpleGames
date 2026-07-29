@@ -174,10 +174,19 @@ export function createGame({
   }
 
   async function showRoomHome() {
+    const overlayNode = query("[data-overlay]");
+    const inviteButton = query("[data-invite-ready]");
+    latestLobby = null;
     homeNode.classList.remove("hidden");
     inviteNode.classList.add("hidden");
     lobbyNode.classList.add("hidden");
-    query("[data-overlay]").classList.remove("hidden");
+    overlayNode.classList.remove("hidden");
+    overlayNode.inert = false;
+    query("[data-status]").textContent = "Choose a room";
+    query("[data-score]").replaceChildren();
+    inviteButton.disabled = false;
+    inviteButton.innerHTML = "I am ready <span>→</span>";
+    query("[data-invite-code]").textContent = "";
     const queryRoom = new URLSearchParams(location.search).get(manifest.legacyQuery);
     if (queryRoom && ROOM_CODE_PATTERN.test(queryRoom.toUpperCase())) {
       homeNode.classList.add("hidden");

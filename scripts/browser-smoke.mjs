@@ -341,6 +341,60 @@ async function verifyClosedGamesCancelMatchmaking(browser) {
   }
 }
 
+async function verifyFourSidesCanCreateAgainAfterExit(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 1024, height: 768 },
+    reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  const failures = [];
+  page.on("pageerror", (error) => failures.push(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() === "error" && !/fonts\.(googleapis|gstatic)\.com/.test(message.text())) {
+      failures.push(`console: ${message.text()}`);
+    }
+  });
+  page.on("response", (response) => {
+    if (response.status() >= 400) failures.push(`response ${response.status()}: ${response.url()}`);
+  });
+
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.locator("[data-play]").click();
+  await page.locator(".game-dialog").waitFor({ state: "visible" });
+  await page.locator("[data-player-name]").fill("Reopen Test");
+  await page.locator("[data-create-room]").click();
+  await page.locator("[data-room-lobby]").waitFor({ state: "visible" });
+  const firstRoom = await page.locator("[data-lobby-code]").textContent();
+  await page.locator("[data-start-match]").click();
+  await page.waitForFunction(() => {
+    const overlay = document.querySelector("[data-overlay]");
+    return overlay?.classList.contains("hidden") && overlay.inert;
+  });
+
+  await page.locator(".close-game").click();
+  await page.locator(".game-dialog").waitFor({ state: "hidden" });
+  assert.equal(new URL(page.url()).pathname, "/");
+
+  await page.locator("[data-play]").click();
+  await page.locator(".game-dialog").waitFor({ state: "visible" });
+  const reopenedOverlay = await page.locator("[data-overlay]").evaluate((overlay) => ({
+    hidden: overlay.classList.contains("hidden"),
+    inert: overlay.inert,
+  }));
+  assert.deepEqual(reopenedOverlay, { hidden: false, inert: false });
+
+  await page.locator("[data-create-room]").click();
+  await page.locator("[data-room-lobby]").waitFor({ state: "visible" });
+  const secondRoom = await page.locator("[data-lobby-code]").textContent();
+  assert.match(firstRoom || "", /^[A-Z0-9]{6}$/);
+  assert.match(secondRoom || "", /^[A-Z0-9]{6}$/);
+  assert.notEqual(secondRoom, firstRoom, "reopening must create a fresh room without a refresh");
+  await page.locator(".close-game").click();
+
+  assert.deepEqual(failures, [], "Four Sides reopen flow emitted runtime errors");
+  await context.close();
+}
+
 const browser = await chromium.launch({
   executablePath,
   headless: true,
@@ -354,6 +408,7 @@ try {
   await verifyShareableRoutes(browser);
   await verifyRegisteredGames(browser);
   await verifyClosedGamesCancelMatchmaking(browser);
+  await verifyFourSidesCanCreateAgainAfterExit(browser);
   process.stdout.write("Browser smoke passed at desktop, mobile, compact, and every registered game route.\n");
 } finally {
   await browser.close();
