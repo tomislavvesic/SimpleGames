@@ -6,7 +6,7 @@ import {
   PADDLE_HALF,
   advanceArenaBall,
   clampPaddle,
-} from "./four-sides-physics.js";
+} from "../shared/physics.js";
 
 const COLORS = {
   bg: "#10151d",
@@ -79,17 +79,18 @@ export class ArenaGame {
     });
   }
 
-  async listRooms() {
-    const response = await fetch("/api/rooms");
+  async listRooms({ signal } = {}) {
+    const response = await fetch("/api/rooms", { signal });
     if (!response.ok) throw new Error("Could not load public rooms");
     return (await response.json()).rooms;
   }
 
-  async createRoom(settings) {
+  async createRoom(settings, { signal } = {}) {
     const response = await fetch("/api/rooms/create", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(settings),
+      signal,
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -98,11 +99,12 @@ export class ArenaGame {
     return response.json();
   }
 
-  async quickPlay(mode) {
+  async quickPlay(mode, { signal } = {}) {
     const response = await fetch("/api/rooms/quick", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode }),
+      signal,
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -225,7 +227,11 @@ export class ArenaGame {
     if (message.type === "welcome") {
       this.playerId = message.playerId;
       this.side = message.side;
-      history.replaceState({}, "", `?room=${message.code}`);
+      history.replaceState(
+        {},
+        "",
+        `/games/four-sides?room=${encodeURIComponent(message.code)}`,
+      );
       this.statusNode.textContent = `Room ${message.code}`;
       if (this.autoReady) {
         this.send({ type: "ready", ready: true });

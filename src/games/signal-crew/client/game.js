@@ -25,6 +25,9 @@ export class SignalGame {
     this.resultReported = false;
     this.resuming = false;
     this.lastAnnouncedCommandId = null;
+    this.isOpen = false;
+    this.openEpoch = 0;
+    this.pendingRequests = new Set();
     this.render();
     this.bind();
   }
@@ -120,19 +123,23 @@ export class SignalGame {
     this.$("[data-signal-close]").addEventListener("click", () => this.close());
     this.$("[data-signal-create]").addEventListener("click", (event) => this.loading(event.currentTarget, async () => {
       const name = this.requireName(this.$("[data-signal-name]"));
-      const response = await fetch("/api/signal/rooms/create", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          isPublic: this.$("[data-signal-public]").checked,
-          bots: this.$("[data-signal-bots]").checked,
-        }),
+      const room = await this.requestWhileOpen(async (signal) => {
+        const response = await fetch("/api/signal/rooms/create", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            isPublic: this.$("[data-signal-public]").checked,
+            bots: this.$("[data-signal-bots]").checked,
+          }),
+          signal,
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error || "Could not create mission");
+        }
+        return response.json();
       });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || "Could not create mission");
-      }
-      const room = await response.json();
+      if (!room) return;
       this.join(room.code, name, {
         ownerToken: room.ownerToken,
         ownerPlayerId: room.ownerPlayerId,
@@ -141,12 +148,18 @@ export class SignalGame {
     }));
     this.$("[data-signal-quick]").addEventListener("click", (event) => this.loading(event.currentTarget, async () => {
       const name = this.requireName(this.$("[data-signal-name]"));
-      const response = await fetch("/api/signal/rooms/quick", { method: "POST" });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || "Could not find a mission");
-      }
-      const room = await response.json();
+      const room = await this.requestWhileOpen(async (signal) => {
+        const response = await fetch("/api/signal/rooms/quick", {
+          method: "POST",
+          signal,
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error || "Could not find a mission");
+        }
+        return response.json();
+      });
+      if (!room) return;
       this.join(room.code, name, {
         ownerToken: room.ownerToken || null,
         ownerPlayerId: room.ownerPlayerId || null,
@@ -207,6 +220,9 @@ export class SignalGame {
   }
 
   open() {
+    this.abortPendingRequests();
+    this.isOpen = true;
+    this.openEpoch += 1;
     if (!this.dialog.open) this.dialog.showModal();
     const name = this.getPlayerName() || "";
     this.$("[data-signal-name]").value = name;
@@ -223,14 +239,41 @@ export class SignalGame {
   }
 
   close() {
+    this.isOpen = false;
+    this.openEpoch += 1;
+    this.abortPendingRequests();
     clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.room = null;
     const socket = this.socket;
     this.socket = null;
     if (socket?.readyState < 2) socket.close(1000, "Left mission");
-    history.replaceState({}, "", location.pathname);
     if (this.dialog.open) this.dialog.close();
+  }
+
+  async requestWhileOpen(action) {
+    if (!this.isOpen) return null;
+    const requestEpoch = this.openEpoch;
+    const controller = new AbortController();
+    this.pendingRequests.add(controller);
+    try {
+      const result = await action(controller.signal);
+      return this.isOpen && requestEpoch === this.openEpoch ? result : null;
+    } catch (error) {
+      if (error.name === "AbortError"
+        || !this.isOpen
+        || requestEpoch !== this.openEpoch) {
+        return null;
+      }
+      throw error;
+    } finally {
+      this.pendingRequests.delete(controller);
+    }
+  }
+
+  abortPendingRequests() {
+    this.pendingRequests.forEach((controller) => controller.abort());
+    this.pendingRequests.clear();
   }
 
   roomCredentials(code, suppliedId, suppliedToken) {
@@ -331,7 +374,11 @@ export class SignalGame {
     if (message.type === "welcome") {
       this.playerId = message.playerId;
       this.station = message.station;
-      history.replaceState({}, "", `?signal=${message.code}`);
+      history.replaceState(
+        {},
+        "",
+        `/games/signal-crew?signal=${encodeURIComponent(message.code)}`,
+      );
       this.$("[data-signal-status]").textContent = `Mission ${message.code}`;
       if (this.autoReady) {
         this.send({ type: "ready", ready: true });
@@ -480,8 +527,13 @@ export class SignalGame {
     const node = this.$("[data-signal-rooms]");
     node.innerHTML = "<small>Scanning…</small>";
     try {
-      const response = await fetch("/api/signal/rooms");
-      const rooms = (await response.json()).rooms;
+      const rooms = await this.requestWhileOpen(async (signal) => {
+        const response = await fetch("/api/signal/rooms", { signal });
+        if (!response.ok) throw new Error("Could not scan public missions");
+        const body = await response.json();
+        return Array.isArray(body.rooms) ? body.rooms : [];
+      });
+      if (!rooms) return;
       node.innerHTML = rooms.length ? rooms.map((room) => `
         <button type="button" data-signal-room="${room.code}"><span><b>${room.code}</b><small>${room.players}/4 crew</small></span><i>Join →</i></button>
       `).join("") : "<small>No open missions. Start the first one.</small>";
@@ -493,7 +545,9 @@ export class SignalGame {
         }
       }));
     } catch {
-      node.innerHTML = "<small>Could not scan public missions.</small>";
+      if (this.isOpen) {
+        node.innerHTML = "<small>Could not scan public missions.</small>";
+      }
     }
   }
 

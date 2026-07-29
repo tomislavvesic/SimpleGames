@@ -36,6 +36,16 @@ Run the complete Worker, including Durable Objects and WebSockets:
 npx wrangler dev --local --port 8791
 ```
 
+## Architecture and adding games
+
+The landing page, shared services, and games remain in one repository. Each
+game lives under `src/games/<game-id>/`, supplies a small catalog manifest, and
+is downloaded only when launched. Shared profile and server utilities live
+under `src/shared/`; the application shell and router live under `src/app/`.
+
+See [docs/ADDING_A_GAME.md](docs/ADDING_A_GAME.md) for the module contract,
+manifest schema, colocated testing convention, and release checklist.
+
 ## Verification
 
 Fast deterministic tests are part of the production build, so a failing test
@@ -44,6 +54,7 @@ also blocks Cloudflare's configured deployment:
 ```bash
 npm test
 npm run build
+npm run check:bundle
 npm run check:deploy
 ```
 
@@ -61,7 +72,8 @@ Chromium-family browser. GitHub Actions runs all of these checks on pushes and
 pull requests.
 
 The standards every new game must satisfy are in
-[docs/GAME_QUALITY.md](docs/GAME_QUALITY.md).
+[docs/GAME_QUALITY.md](docs/GAME_QUALITY.md). Production bundle sizes are
+compared with the pre-modular baseline during every build.
 
 ## Cloudflare deployment
 

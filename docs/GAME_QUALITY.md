@@ -55,6 +55,11 @@ definition of done for a new game or a material gameplay change.
 
 ## Required evidence
 
+- Register a complete, unique manifest and preserve its canonical route and
+  profile identifier after release.
+- Keep the implementation behind the manifest's dynamic `load()` boundary;
+  opening the landing page must not fetch every game's JavaScript.
+- Keep deterministic tests beside the game or shared module they exercise.
 - Unit tests cover deterministic rules, bounds, scoring, difficulty, and
   generated-content validity.
 - Generated levels are checked in bulk for solvability and fair timing.
@@ -63,7 +68,8 @@ definition of done for a new game or a material gameplay change.
 - Online games have real-WebSocket integration tests for create/join, security,
   ready/start, bot takeover, reconnect, completion, rematch, host closure, and
   warm closed-room rejection.
-- `npm run build` and `npm run check:deploy` pass before merge.
+- `npm run build`, including catalog and bundle-budget validation, and
+  `npm run check:deploy` pass before merge.
 - The deployed Worker is checked after release for asset delivery, security
   headers, API health, and a live WebSocket room.
 

@@ -10,7 +10,7 @@ import {
   normalizeNickname,
   sanitizeProfile,
   updateGameStats,
-} from "../src/player-profile.js";
+} from "./profile.js";
 
 class FakeStorage {
   constructor(entries = {}) {

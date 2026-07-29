@@ -22,6 +22,11 @@
 .signal-name span { display: block; margin-bottom: 6px; color: #7e8486; text-transform: uppercase; letter-spacing: .1em; font: 500 8px "DM Mono"; }
 .signal-name input, .signal-code-join input { width: 100%; border: 1px solid rgba(255,255,255,.16); background: #111721; color: white; padding: 11px 12px; outline: none; }
 .signal-name input:focus, .signal-code-join input:focus { border-color: var(--mint); }
+.signal-name input:focus-visible, .signal-code-join input:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(99, 214, 174, .16);
+}
 .signal-options { display: flex; justify-content: center; gap: 24px; margin: 16px; color: #9aa0a1; font: 400 9px "DM Mono"; }
 .signal-actions { display: flex; gap: 8px; justify-content: center; }
 .signal-actions .primary-button { padding-block: 12px; }

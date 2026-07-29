@@ -8,11 +8,12 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "npm run test:unit && vite build",
+    "build": "npm run test:unit && vite build && npm run check:bundle",
     "test": "node --test",
     "test:unit": "node --test",
     "test:integration": "node scripts/multiplayer-smoke.mjs",
     "test:browser": "node scripts/browser-smoke.mjs",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
     "check:deploy": "wrangler deploy --dry-run",
     "preview": "vite preview",
     "deploy": "wrangler deploy"

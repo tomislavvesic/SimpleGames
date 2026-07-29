@@ -11,7 +11,7 @@ import {
   paddleBounds,
   predictPaddleTarget,
   reflectedCoordinate,
-} from "../src/four-sides-physics.js";
+} from "./physics.js";
 
 const paddle = (side, pos = 0.5) => ({ side, pos, eliminated: false });
 

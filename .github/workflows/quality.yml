@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Unit tests and production build
+      - name: Unit tests, production build, and bundle budgets
         run: npm run build
 
       - name: Validate the Cloudflare bundle

@@ -1,3 +1,21 @@
+.maze-dialog {
+  width: min(1050px, calc(100% - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 4px;
+  color: var(--ink);
+  background: #0d1118;
+  box-shadow: 0 30px 100px #000;
+}
+
+.maze-dialog::backdrop {
+  background: rgba(3,5,8,.87);
+  backdrop-filter: blur(8px);
+}
+
 .owo-shell {
   --owo-ink: var(--ink, #e9e9df);
   --owo-muted: var(--muted, #9a9d9c);

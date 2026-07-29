@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rematchQuorum } from "../src/room-lifecycle.js";
+import { rematchQuorum } from "./room-lifecycle.js";
 
 const player = (id, { connected = true, rematch = false } = {}) => ({
   id,

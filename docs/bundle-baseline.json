@@ -1,0 +1,16 @@
+{
+  "label": "Pre-modular architecture production build",
+  "commit": "1bb912581fae69caaa4665d2f280078d0cec40c5",
+  "initial": {
+    "rawBytes": 147323,
+    "gzipBytes": 39271
+  },
+  "all": {
+    "rawBytes": 147323,
+    "gzipBytes": 39271
+  },
+  "limits": {
+    "requireInitialReduction": true,
+    "maxTotalGrowthPercent": 20
+  }
+}

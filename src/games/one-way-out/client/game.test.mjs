@@ -10,7 +10,7 @@ import {
   getMazeDifficulty,
   isMazeSolvable,
   validateMaze,
-} from "../src/maze-game.js";
+} from "./game.js";
 
 test("seeded random streams are deterministic and remain in range", () => {
   const first = createSeededRandom("daily-maze");
